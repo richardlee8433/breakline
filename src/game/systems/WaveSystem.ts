@@ -7,22 +7,19 @@ import { gameStore } from '../../store/gameStore'
 import { STAGE_H, PLAYFIELD_LEFT, PLAYFIELD_RIGHT, FORMATION_SCALE } from '../config'
 
 const POOL_SIZE = 160
-// Global spawn-density multiplier: every wave fields 50% more enemies,
-// so the screen stays busier without rewriting per-stage wave data.
 const DENSITY_MULT = 1.5
 
-// Seconds between successive members of a squadron entering, per formation.
-// Releasing a group as a stream instead of one simultaneous block is the
-// single biggest thing that makes a wave read as a flight of craft rather
-// than a wall dropping in. Waves can override this via WaveEntry.interval.
 const DEFAULT_INTERVAL: Record<Formation, number> = {
   'line-top': 0.12,
   'v-shape': 0.10,
   'line-left': 0.16,
   'line-right': 0.16,
+  'arc-left': 0.11,
+  'arc-right': 0.11,
+  'split': 0.13,
+  'pincer': 0.12,
 }
 
-/** A member scheduled to enter, waiting for its slot in the stream. */
 interface PendingSpawn {
   releaseAt: number
   x: number
@@ -53,8 +50,6 @@ export class WaveSystem {
         img.src = src
       })
 
-    // Parallel: sequential awaits over a real CDN added seconds of startup
-    // during which a quick START press could race past initialization.
     await Promise.all(
       Object.entries(ENEMIES).map(async ([key, def]) => {
         this.textures.set(key, await loadTex(def.sprite))
@@ -75,20 +70,28 @@ export class WaveSystem {
     this.dismissAll()
   }
 
-  /**
-   * Queues a wave's members for release rather than activating them now.
-   * Release times are anchored to the wave's own `time`, not to the frame
-   * the scheduler happened to run on, so a stage plays out identically every
-   * run — the memorizability the genre is built on.
-   */
-  private scheduleWave(entry: WaveEntry) {
+  /** Pick the authored base encounter or one of its curated alternatives. */
+  private resolveWave(entry: WaveEntry): WaveEntry {
+    if (!entry.variants?.length) return entry
+    const choices = [null, ...entry.variants]
+    const variant = choices[Math.floor(Math.random() * choices.length)]
+    if (!variant) return entry
+    return {
+      ...entry,
+      count: variant.count ?? entry.count,
+      formation: variant.formation ?? entry.formation,
+      path: variant.path ?? entry.path,
+      interval: variant.interval ?? entry.interval,
+    }
+  }
+
+  private scheduleWave(source: WaveEntry) {
+    const entry = this.resolveWave(source)
     let def: EnemyDef | undefined = ENEMIES[entry.type]
     if (!def) return
     const tex = this.textures.get(entry.type)
     if (!tex) return
 
-    // Loop rank: every playthrough past the first fields faster enemies
-    // with quicker, faster bullets (capped so loop 5+ stays humanly possible)
     const rank = Math.min(gameStore.getState().loop - 1, 4)
     if (rank > 0) {
       def = {
@@ -99,10 +102,8 @@ export class WaveSystem {
       }
     }
 
-    // Horizontal formations widen with the field, so scale their counts to
-    // keep enemies-per-screen-width constant. The side columns are vertical —
-    // scaling those by width would stack them off the bottom of the screen.
-    const horizontal = entry.formation === 'line-top' || entry.formation === 'v-shape'
+    const horizontal = ['line-top', 'v-shape', 'arc-left', 'arc-right', 'split', 'pincer']
+      .includes(entry.formation)
     const count = Math.round(entry.count * DENSITY_MULT * (horizontal ? FORMATION_SCALE : 1))
     const positions = formation(entry.formation, count, STAGE_H)
     const interval = entry.interval ?? DEFAULT_INTERVAL[entry.formation]
@@ -114,8 +115,6 @@ export class WaveSystem {
         x, y, def, path: entry.path, tex,
       })
     }
-    // Two waves can share a `time`; keep the queue ordered so the drain in
-    // update() can stop at the first member that is not due yet.
     this.pending.sort((a, b) => a.releaseAt - b.releaseAt)
   }
 
@@ -131,9 +130,6 @@ export class WaveSystem {
       this.nextWaveIdx++
     }
 
-    // Release everything that has come due. Activating here (rather than at
-    // schedule time) means a dive locks its aim on where the player actually
-    // is as that member enters, not where they were when the wave fired.
     while (this.pending.length && this.elapsed >= this.pending[0].releaseAt) {
       const p = this.pending.shift()!
       const enemy = this.enemies.find((e) => !e.active)
@@ -159,32 +155,27 @@ export class WaveSystem {
   }
 
   dismissAll() {
-    // Queued members must go too, or a stream keeps trickling in during the
-    // boss WARNING banner after the field was supposedly cleared.
     this.pending.length = 0
     for (const e of this.enemies) e.deactivate()
   }
 }
 
-/** Lays out `count` enemies so the shape always fits inside the stage. */
-function formation(
-  type: WaveEntry['formation'],
-  count: number,
-  stageH: number,
-): [number, number][] {
+/** Lays out a squadron's entry points. Movement is handled independently by Enemy. */
+function formation(type: Formation, count: number, stageH: number): [number, number][] {
   const out: [number, number][] = []
+  const width = PLAYFIELD_RIGHT - PLAYFIELD_LEFT
+  const center = (PLAYFIELD_LEFT + PLAYFIELD_RIGHT) / 2
 
   switch (type) {
     case 'line-top': {
-      const spacing = Math.min(70, (PLAYFIELD_RIGHT - PLAYFIELD_LEFT - 100) / Math.max(count - 1, 1))
+      const spacing = Math.min(70, (width - 100) / Math.max(count - 1, 1))
       const totalW = spacing * (count - 1)
-      const startX = PLAYFIELD_LEFT + (PLAYFIELD_RIGHT - PLAYFIELD_LEFT - totalW) / 2
+      const startX = PLAYFIELD_LEFT + (width - totalW) / 2
       for (let i = 0; i < count; i++) out.push([startX + i * spacing, -30])
       break
     }
     case 'line-left':
     case 'line-right': {
-      // Vertical column down one edge — space it to fit the stage height
       const x = type === 'line-left' ? PLAYFIELD_LEFT - 30 : PLAYFIELD_RIGHT + 30
       const spacing = Math.min(55, (stageH * 0.6) / Math.max(count - 1, 1))
       for (let i = 0; i < count; i++) out.push([x, 80 + i * spacing])
@@ -192,15 +183,47 @@ function formation(
     }
     case 'v-shape': {
       const half = Math.floor(count / 2)
-      // Arm length fits the widest wing inside the stage
-      const arm = half > 0 ? Math.min(70, ((PLAYFIELD_RIGHT - PLAYFIELD_LEFT) / 2 - 60) / half) : 0
-      const center = (PLAYFIELD_LEFT + PLAYFIELD_RIGHT) / 2
-      // Emitted apex first, then alternating wings. Same shape as before, but
-      // the index order is now the order the V should stream in.
+      const arm = half > 0 ? Math.min(70, (width / 2 - 60) / half) : 0
       for (let i = 0; i < count; i++) {
         const rank = Math.ceil(i / 2)
         const dir = i % 2 === 1 ? -1 : 1
         out.push([center + dir * rank * arm, -30 - rank * 20])
+      }
+      break
+    }
+    case 'arc-left':
+    case 'arc-right': {
+      const fromLeft = type === 'arc-left'
+      const usable = width * 0.62
+      for (let i = 0; i < count; i++) {
+        const t = count <= 1 ? 0.5 : i / (count - 1)
+        const x = fromLeft
+          ? PLAYFIELD_LEFT - 35 + t * usable
+          : PLAYFIELD_RIGHT + 35 - t * usable
+        const y = -25 - Math.sin(t * Math.PI) * 105 - i * 7
+        out.push([x, y])
+      }
+      break
+    }
+    case 'split': {
+      const half = Math.ceil(count / 2)
+      const spacing = Math.min(55, width * 0.34 / Math.max(half - 1, 1))
+      for (let i = 0; i < count; i++) {
+        const sideIndex = Math.floor(i / 2)
+        const left = i % 2 === 0
+        const x = left
+          ? center - 55 - sideIndex * spacing
+          : center + 55 + sideIndex * spacing
+        out.push([x, -30 - sideIndex * 14])
+      }
+      break
+    }
+    case 'pincer': {
+      const spacing = Math.min(52, (stageH * 0.34) / Math.max(Math.ceil(count / 2) - 1, 1))
+      for (let i = 0; i < count; i++) {
+        const rank = Math.floor(i / 2)
+        const left = i % 2 === 0
+        out.push([left ? PLAYFIELD_LEFT - 35 : PLAYFIELD_RIGHT + 35, 45 + rank * spacing])
       }
       break
     }
