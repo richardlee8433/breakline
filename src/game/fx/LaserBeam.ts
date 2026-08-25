@@ -46,7 +46,9 @@ export class LaserBeam {
     }
 
     this.active = true
-    const w = 1 + laserPower * 0.25   // 1.25× – 2.25× at power 1–5
+    // Each upgrade increases beam width by 20% over the previous level.
+    // L1 = 1.00x, L2 = 1.20x, L3 = 1.44x, L4 = 1.73x, L5 = 2.07x.
+    const w = Math.pow(1.2, laserPower - 1)
     const pulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.025)
 
     // Outer soft aura
