@@ -1,6 +1,17 @@
 export type BgTheme = 'space' | 'nebula' | 'asteroid'
-export type EnemyPath = 'straight' | 'zigzag' | 'dive' | 'diagonal-left' | 'diagonal-right'
-export type Formation = 'line-top' | 'line-left' | 'line-right' | 'v-shape'
+export type EnemyPath =
+  | 'straight' | 'zigzag' | 'dive' | 'diagonal-left' | 'diagonal-right'
+  | 'swoop-left' | 'swoop-right' | 'sine'
+export type Formation =
+  | 'line-top' | 'line-left' | 'line-right' | 'v-shape'
+  | 'arc-left' | 'arc-right' | 'split' | 'pincer'
+
+export interface WaveVariant {
+  count?: number
+  formation?: Formation
+  path?: EnemyPath
+  interval?: number
+}
 
 export interface WaveEntry {
   time: number
@@ -8,25 +19,24 @@ export interface WaveEntry {
   count: number
   formation: Formation
   path: EnemyPath
-  /**
-   * Seconds between successive members entering. A squadron is released as a
-   * stream, not popped in on a single frame, so the group reads as a flight
-   * path instead of a wall. Omit to take the per-formation default in
-   * WaveSystem; set 0 for a deliberate simultaneous wall.
-   */
+  /** Seconds between successive members entering. */
   interval?: number
+  /**
+   * Curated alternatives for this encounter. One is chosen when the wave is
+   * scheduled, keeping the stage learnable while stopping repeat runs from
+   * being frame-for-frame identical.
+   */
+  variants?: WaveVariant[]
 }
 
 export interface BossConfig {
-  shipSprite: string   // path to ship png
-  displayW: number     // on-screen width in stage px (before SPRITE_SCALE);
-                       // the texture's own resolution is divided out, so art
-                       // of any size keeps the footprint stated here
-  flipY: boolean       // true for art drawn nose-up (Kenney ships face away)
+  shipSprite: string
+  displayW: number
+  flipY: boolean
   maxHp: number
-  speedMult: number    // multiplier on sweep speed
+  speedMult: number
   bulletSpeedMult: number
-  fireRateMult: number // multiplier on fire interval (< 1 = faster)
+  fireRateMult: number
   scoreValue: number
 }
 
@@ -38,26 +48,28 @@ export interface StageConfig {
   boss: BossConfig
 }
 
-// ─────────────────────────────────────────────────────────────
-// Stage 1 — Deep Space
-// ─────────────────────────────────────────────────────────────
+// Stage 1 — Deep Space: readable formations, with gentle curved entries.
 const stage1: StageConfig = {
   id: 1,
   bgTheme: 'space',
   bossTriggerTime: 42,
   waves: [
-    { time: 1,  type: 'fighter', count: 5, formation: 'line-top',   path: 'straight' },
-    { time: 4,  type: 'scout',   count: 6, formation: 'line-top',   path: 'zigzag'   },
-    { time: 8,  type: 'fighter', count: 4, formation: 'line-left',  path: 'dive'     },
-    { time: 10, type: 'fighter', count: 4, formation: 'line-right', path: 'dive'     },
-    { time: 14, type: 'bomber',  count: 3, formation: 'line-top',   path: 'straight' },
-    { time: 16, type: 'scout',   count: 5, formation: 'line-top',   path: 'zigzag'   },
-    { time: 20, type: 'scout',   count: 7, formation: 'v-shape',    path: 'zigzag'   },
-    { time: 24, type: 'fighter', count: 4, formation: 'line-left',  path: 'diagonal-right' },
-    { time: 24, type: 'fighter', count: 4, formation: 'line-right', path: 'diagonal-left'  },
-    { time: 29, type: 'bomber',  count: 3, formation: 'line-top',   path: 'straight' },
-    { time: 32, type: 'scout',   count: 6, formation: 'v-shape',    path: 'dive'     },
-    { time: 35, type: 'fighter', count: 6, formation: 'line-top',   path: 'zigzag'   },
+    { time: 1,  type: 'fighter', count: 5, formation: 'line-top', path: 'straight',
+      variants: [{ formation: 'split' }, { formation: 'v-shape', path: 'sine' }] },
+    { time: 4,  type: 'scout', count: 6, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
+    { time: 8,  type: 'fighter', count: 4, formation: 'line-left', path: 'dive' },
+    { time: 10, type: 'fighter', count: 4, formation: 'line-right', path: 'dive' },
+    { time: 14, type: 'bomber', count: 3, formation: 'split', path: 'straight', interval: 0.22 },
+    { time: 17, type: 'scout', count: 6, formation: 'v-shape', path: 'sine',
+      variants: [{ formation: 'arc-left', path: 'swoop-right' }, { formation: 'arc-right', path: 'swoop-left' }] },
+    { time: 21, type: 'scout', count: 7, formation: 'split', path: 'zigzag' },
+    { time: 25, type: 'fighter', count: 7, formation: 'pincer', path: 'dive', interval: 0.13,
+      variants: [{ path: 'diagonal-left' }, { path: 'diagonal-right' }] },
+    { time: 30, type: 'bomber', count: 3, formation: 'line-top', path: 'straight' },
+    { time: 33, type: 'scout', count: 6, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }, { formation: 'v-shape', path: 'dive' }] },
+    { time: 37, type: 'fighter', count: 7, formation: 'split', path: 'sine' },
   ],
   boss: {
     shipSprite: './assets/ships/boss1-dreadnought.png',
@@ -66,28 +78,30 @@ const stage1: StageConfig = {
   },
 }
 
-// ─────────────────────────────────────────────────────────────
-// Stage 2 — Nebula Field
-// ─────────────────────────────────────────────────────────────
+// Stage 2 — Nebula Field: ambushes, crossfire and delayed pressure.
 const stage2: StageConfig = {
   id: 2,
   bgTheme: 'nebula',
   bossTriggerTime: 46,
   waves: [
-    { time: 1,  type: 'interceptor', count: 6, formation: 'line-top',   path: 'straight'       },
-    { time: 4,  type: 'fighter',     count: 5, formation: 'line-right',  path: 'diagonal-left'  },
-    { time: 6,  type: 'fighter',     count: 5, formation: 'line-left',   path: 'diagonal-right' },
-    { time: 10, type: 'gunship',     count: 2, formation: 'line-top',    path: 'straight'       },
-    { time: 12, type: 'scout',       count: 6, formation: 'v-shape',     path: 'zigzag'         },
-    { time: 16, type: 'interceptor', count: 6, formation: 'line-top',    path: 'dive'           },
-    { time: 19, type: 'bomber',      count: 3, formation: 'line-top',    path: 'straight'       },
-    { time: 22, type: 'gunship',     count: 3, formation: 'line-top',    path: 'straight'       },
-    { time: 25, type: 'interceptor', count: 5, formation: 'line-right',  path: 'diagonal-left'  },
-    { time: 25, type: 'interceptor', count: 5, formation: 'line-left',   path: 'diagonal-right' },
-    { time: 30, type: 'scout',       count: 7, formation: 'v-shape',     path: 'zigzag'         },
-    { time: 33, type: 'bomber',      count: 4, formation: 'line-top',    path: 'straight'       },
-    { time: 37, type: 'interceptor', count: 7, formation: 'v-shape',     path: 'dive'           },
-    { time: 41, type: 'gunship',     count: 3, formation: 'line-top',    path: 'straight'       },
+    { time: 1, type: 'interceptor', count: 6, formation: 'split', path: 'sine',
+      variants: [{ formation: 'v-shape', path: 'dive' }] },
+    { time: 4, type: 'fighter', count: 7, formation: 'pincer', path: 'dive', interval: 0.11 },
+    { time: 8, type: 'fighter', count: 5, formation: 'line-right', path: 'swoop-left',
+      variants: [{ formation: 'line-left', path: 'swoop-right' }] },
+    { time: 11, type: 'gunship', count: 2, formation: 'split', path: 'straight', interval: 0.35 },
+    { time: 14, type: 'scout', count: 7, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
+    { time: 18, type: 'interceptor', count: 7, formation: 'pincer', path: 'dive' },
+    { time: 21, type: 'bomber', count: 3, formation: 'line-top', path: 'straight' },
+    { time: 24, type: 'gunship', count: 3, formation: 'split', path: 'straight' },
+    { time: 27, type: 'interceptor', count: 6, formation: 'line-left', path: 'swoop-right',
+      variants: [{ formation: 'line-right', path: 'swoop-left' }, { formation: 'pincer', path: 'dive' }] },
+    { time: 31, type: 'scout', count: 8, formation: 'split', path: 'zigzag' },
+    { time: 34, type: 'bomber', count: 4, formation: 'v-shape', path: 'straight' },
+    { time: 38, type: 'interceptor', count: 8, formation: 'pincer', path: 'dive', interval: 0.10 },
+    { time: 42, type: 'gunship', count: 3, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
   ],
   boss: {
     shipSprite: './assets/ships/boss2-cruiser.png',
@@ -96,29 +110,31 @@ const stage2: StageConfig = {
   },
 }
 
-// ─────────────────────────────────────────────────────────────
-// Stage 3 — Asteroid Belt
-// ─────────────────────────────────────────────────────────────
+// Stage 3 — Asteroid Belt: overlapping formations and less predictable attack geometry.
 const stage3: StageConfig = {
   id: 3,
   bgTheme: 'asteroid',
   bossTriggerTime: 44,
   waves: [
-    { time: 1,  type: 'elite',        count: 6, formation: 'line-top',   path: 'diagonal-left'  },
-    { time: 3,  type: 'elite',        count: 6, formation: 'line-top',   path: 'diagonal-right' },
-    { time: 6,  type: 'carrier',      count: 2, formation: 'line-top',   path: 'straight'       },
-    { time: 9,  type: 'interceptor',  count: 6, formation: 'v-shape',    path: 'zigzag'         },
-    { time: 12, type: 'scout',        count: 6, formation: 'line-top',   path: 'zigzag'         },
-    { time: 15, type: 'carrier',      count: 3, formation: 'line-top',   path: 'straight'       },
-    { time: 18, type: 'elite',        count: 5, formation: 'line-right',  path: 'diagonal-left'  },
-    { time: 18, type: 'elite',        count: 5, formation: 'line-left',   path: 'diagonal-right' },
-    { time: 22, type: 'gunship',      count: 4, formation: 'line-top',   path: 'straight'       },
-    { time: 25, type: 'interceptor',  count: 7, formation: 'v-shape',    path: 'dive'           },
-    { time: 28, type: 'bomber',       count: 4, formation: 'line-top',   path: 'straight'       },
-    { time: 31, type: 'carrier',      count: 3, formation: 'line-top',   path: 'straight'       },
-    { time: 34, type: 'elite',        count: 6, formation: 'line-top',   path: 'dive'           },
-    { time: 37, type: 'interceptor',  count: 6, formation: 'line-top',   path: 'straight'       },
-    { time: 40, type: 'carrier',      count: 3, formation: 'v-shape',    path: 'straight'       },
+    { time: 1, type: 'elite', count: 7, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }, { formation: 'split', path: 'sine' }] },
+    { time: 4, type: 'elite', count: 7, formation: 'pincer', path: 'dive', interval: 0.10 },
+    { time: 7, type: 'carrier', count: 2, formation: 'split', path: 'straight' },
+    { time: 10, type: 'interceptor', count: 7, formation: 'v-shape', path: 'sine',
+      variants: [{ formation: 'pincer', path: 'dive' }] },
+    { time: 13, type: 'scout', count: 7, formation: 'arc-right', path: 'swoop-left' },
+    { time: 16, type: 'carrier', count: 3, formation: 'line-top', path: 'straight' },
+    { time: 18, type: 'elite', count: 6, formation: 'line-left', path: 'swoop-right' },
+    { time: 19, type: 'elite', count: 6, formation: 'line-right', path: 'swoop-left' },
+    { time: 23, type: 'gunship', count: 4, formation: 'split', path: 'straight' },
+    { time: 26, type: 'interceptor', count: 8, formation: 'pincer', path: 'dive', interval: 0.09,
+      variants: [{ formation: 'split', path: 'sine' }] },
+    { time: 29, type: 'bomber', count: 4, formation: 'v-shape', path: 'straight' },
+    { time: 32, type: 'carrier', count: 3, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
+    { time: 35, type: 'elite', count: 8, formation: 'split', path: 'dive' },
+    { time: 38, type: 'interceptor', count: 7, formation: 'pincer', path: 'sine' },
+    { time: 41, type: 'carrier', count: 3, formation: 'v-shape', path: 'straight' },
   ],
   boss: {
     shipSprite: './assets/ships/boss3-fortress.png',
