@@ -11,7 +11,12 @@ export interface Bullet {
   grazed: boolean  // already awarded a graze; reset on acquire
   damage: number
   cancelsHostile: boolean
+  penetrates: boolean
+  hitEnemyIds: Set<EnemyHitTarget>
 }
+
+/** Object identity is enough to prevent one penetrating shot damaging the same enemy every frame. */
+export type EnemyHitTarget = object
 
 export class BulletPool {
   private pool: Bullet[] = []
@@ -25,6 +30,7 @@ export class BulletPool {
       this.pool.push({
         sprite, prevX: 0, prevY: 0, vx: 0, vy: 0,
         active: false, grazed: false, damage: 1, cancelsHostile: false,
+        penetrates: false, hitEnemyIds: new Set(),
       })
     }
   }
@@ -32,7 +38,7 @@ export class BulletPool {
   acquire(
     x: number, y: number, vx: number, vy: number,
     damage = 1, tint = 0xffffff, scale = 1, texture?: Texture,
-    cancelsHostile = false,
+    cancelsHostile = false, penetrates = false,
   ): Bullet | null {
     const b = this.pool.find((b) => !b.active)
     if (!b) return null
@@ -42,6 +48,8 @@ export class BulletPool {
     b.vy = vy
     b.damage = damage
     b.cancelsHostile = cancelsHostile
+    b.penetrates = penetrates
+    b.hitEnemyIds.clear()
     b.prevX = x
     b.prevY = y
     b.sprite.x = x
@@ -56,6 +64,7 @@ export class BulletPool {
   release(b: Bullet) {
     b.active = false
     b.sprite.visible = false
+    b.hitEnemyIds.clear()
   }
 
   releaseAll() {
