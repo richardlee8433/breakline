@@ -20,6 +20,7 @@ export class Enemy {
   private zigzagDir = 1
   private playerX = 240
   private diagVx = 0
+  private spawnX = 0
   private laserG: Graphics | null = null
   private laserTimer = 0
   private laserDuration = 0
@@ -30,7 +31,6 @@ export class Enemy {
   private fireTimer = 0
   private engineG: Graphics
   private hitG: Graphics
-  // Committed dive heading (unit vector), locked once instead of re-aimed
   private aimVx = 0
   private aimVy = 1
   private diveLocked = false
@@ -62,16 +62,14 @@ export class Enemy {
     this.hp = def.hp
     this.scoreValue = def.scoreValue
     this.age = 0
+    this.spawnX = x
     this.playerX = playerX
-    this.laserTimer = 1 + Math.random() * 1.5  // stagger initial fire
-    // Random phase on the shot cadence. Every member of a squadron shares the
-    // same age, so a shared timer made them all fire on the same frame — one
-    // solid wall of bullets instead of fire coming from individual ships.
+    this.laserTimer = 1 + Math.random() * 1.5
     this.fireTimer = def.fireRate > 0
       ? def.fireRate * (0.35 + Math.random() * 0.65)
       : 0
     this.laserDuration = 0
-    this.spiralAngle = Math.random() * Math.PI * 2  // desync pattern shooters
+    this.spiralAngle = Math.random() * Math.PI * 2
     if (def.usesLaser && !this.laserG) {
       this.laserG = new Graphics()
       this.container.addChild(this.laserG)
@@ -80,7 +78,7 @@ export class Enemy {
     this.sprite.x = x
     this.sprite.y = y
     this.sprite.scale.set(def.scale * SPRITE_SCALE)
-    this.sprite.rotation = Math.PI   // flip to face downward (avoids negative-scale GPU issues)
+    this.sprite.rotation = Math.PI
     this.sprite.alpha = 1
     this.sprite.tint = 0xffffff
     this.hitFlash = 0
@@ -90,18 +88,14 @@ export class Enemy {
     this.sprite.visible = true
     this.active = true
 
-    // diagonal entry angle: 30° inward
-    this.diagVx = path === 'diagonal-left'  ? -0.58 :   // tan(30°)
-                  path === 'diagonal-right' ?  0.58 : 0
-
-    // A dive commits to its heading the moment it enters; a diagonal commits
-    // later, when it crosses the trigger line mid-screen.
+    this.diagVx = path === 'diagonal-left' ? -0.58 :
+                  path === 'diagonal-right' ? 0.58 : 0
     this.aimVx = 0
     this.aimVy = 1
     this.diveLocked = false
     if (path === 'dive') this.lockDive(x, y, playerX)
 
-    const hw = (this.sprite.width  * 0.6) / 2
+    const hw = (this.sprite.width * 0.6) / 2
     const hh = (this.sprite.height * 0.6) / 2
     this.hitbox = new Rectangle(-hw, -hh, hw * 2, hh * 2)
   }
@@ -126,7 +120,6 @@ export class Enemy {
     )
   }
 
-  /** Flash, sparks and a brief impact star make non-lethal hits read instantly. */
   flash() {
     if (this.hitFlash <= 0) {
       this.hitBurst = 0.13
@@ -159,20 +152,31 @@ export class Enemy {
         if (this.age % 1.2 < dt) this.zigzagDir *= -1
         break
 
+      case 'sine':
+        // Smooth weaving keeps the craft advancing while producing readable lanes.
+        this.sprite.y += spd * 0.78 * dt
+        this.sprite.x = this.spawnX + Math.sin(this.age * 2.6) * 78
+        break
+
+      case 'swoop-left':
+      case 'swoop-right': {
+        // A broad banking pass: strong lateral motion on entry, easing into a
+        // downward exit. Unlike a dive it never homes on the player.
+        const dir = this.path === 'swoop-left' ? -1 : 1
+        const phase = Math.min(this.age / 2.4, 1)
+        const lateral = dir * spd * (1.25 - phase * 0.95)
+        this.sprite.x += lateral * dt
+        this.sprite.y += spd * (0.48 + phase * 0.55) * dt
+        break
+      }
+
       case 'dive':
-        // Straight, committed run along the heading locked at spawn. Re-aiming
-        // every frame made this track the player like a homing missile, which
-        // reads wrong for a dive-bomber and can't be learned or dodged on
-        // pattern — the thing the genre is built on.
         this.sprite.x += this.aimVx * spd * dt
         this.sprite.y += this.aimVy * spd * dt
         break
 
       case 'diagonal-left':
       case 'diagonal-right': {
-        // Straight down + horizontal drift, then one committed dive. The aim
-        // is snapshotted as it crosses the trigger line, so the turn reads as
-        // a single decisive break rather than a continuous swerve.
         if (!this.diveLocked) {
           this.sprite.y += spd * dt
           this.sprite.x += this.diagVx * spd * dt
@@ -187,28 +191,23 @@ export class Enemy {
       }
     }
 
-    // fire — countdown seeded with a random phase at spawn, so a squadron's
-    // shots scatter over time instead of landing as one synchronized volley
     if (this.def.fireRate > 0) {
       this.fireTimer -= dt
       if (this.fireTimer <= 0) {
         this.fireTimer += this.def.fireRate
-        if (this.fireTimer <= 0) this.fireTimer = this.def.fireRate   // dt spike
+        if (this.fireTimer <= 0) this.fireTimer = this.def.fireRate
         this.fire(bulletPool, playerX, playerY)
       }
     }
 
-    // off-screen cull, plus a hard max-age failsafe so an enemy can never
-    // linger on screen indefinitely even if a movement pattern stalls.
     if (
       this.sprite.y > stageH + 60 || this.sprite.y < -200 ||
-      this.sprite.x < PLAYFIELD_LEFT - 120 || this.sprite.x > PLAYFIELD_RIGHT + 120 ||
+      this.sprite.x < PLAYFIELD_LEFT - 160 || this.sprite.x > PLAYFIELD_RIGHT + 160 ||
       this.age > 30
     ) { this.deactivate(); return }
 
     this.drawVisualFx()
 
-    // Red laser beam (gunship only)
     if (this.def.usesLaser && this.laserG) {
       this.laserTimer -= dt
       if (this.laserTimer <= 0) {
@@ -224,11 +223,6 @@ export class Enemy {
     }
   }
 
-  /**
-   * Snapshots a dive heading toward the player, aimed at a point well below
-   * the screen so the run always keeps descending and exits cleanly. Because
-   * the target is fixed, the resulting path is a straight line.
-   */
   private lockDive(x: number, y: number, targetX: number) {
     const dx = targetX - x
     const dy = (STAGE_H + 300) - y
@@ -253,18 +247,18 @@ export class Enemy {
       }
       case 'ring':
         fireRing(pool, x, y, spd, this.def.bulletCount ?? 8, this.spiralAngle)
-        this.spiralAngle += 0.3   // rotate successive rings so gaps shift
+        this.spiralAngle += 0.3
         break
       case 'spiral':
         fireRing(pool, x, y, spd, this.def.bulletCount ?? 2, this.spiralAngle)
-        this.spiralAngle += 0.42  // per-volley advance traces the spiral arms
+        this.spiralAngle += 0.42
         break
       case 'aimed-fan':
         fireAimedFan(pool, x, y, spd, this.def.bulletCount ?? 3, 0.44, playerX, playerY)
         break
       case 'spread': {
         const count = this.def.spreadCount ?? 3
-        const halfAngle = Math.PI / 6   // ±30° from straight down
+        const halfAngle = Math.PI / 6
         const step = count > 1 ? (halfAngle * 2) / (count - 1) : 0
         for (let i = 0; i < count; i++) {
           const a = -halfAngle + i * step
@@ -286,8 +280,8 @@ export class Enemy {
     g.clear()
     g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0x550000, width: 26, alpha: 0.06 * pulse })
     g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0xff2200, width: 12, alpha: 0.20 * pulse })
-    g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0xff6633, width: 5,  alpha: 0.60 * pulse })
-    g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0xffddcc, width: 2,  alpha: 0.95 * pulse })
+    g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0xff6633, width: 5, alpha: 0.60 * pulse })
+    g.moveTo(x, y).lineTo(x, stageH).stroke({ color: 0xffddcc, width: 2, alpha: 0.95 * pulse })
     g.circle(x, y + 4, 8 + 3 * pulse).stroke({ color: 0xff4422, width: 1.5, alpha: 0.5 })
   }
 
