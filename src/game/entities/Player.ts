@@ -5,30 +5,19 @@ import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 import { PLAYFIELD_LEFT, PLAYFIELD_RIGHT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
 
-// Wide (landscape) battlefields need proportionally faster strafing or
-// crossing the field feels sluggish; portrait keeps the classic 300.
 const SPEED = 300 * SPRITE_SCALE
 const PLAYFIELD_CENTER = PLAYFIELD_LEFT + PLAYFIELD_W / 2
 const FOCUS_SPEED_MULT = 0.4
-const BANK_ANGLE = 0.22        // max hull tilt (radians) when strafing
-const RESPAWN_DELAY = 1.1      // seconds off-screen after death
-const RESPAWN_FLY_SPEED = 300  // fly-in speed from the bottom edge
+const BANK_ANGLE = 0.22
+const RESPAWN_DELAY = 1.1
+const RESPAWN_FLY_SPEED = 300
 const RESPAWN_INVINCIBLE = 3
-// Deathbomb: after a fatal hit the death is held for a brief window; bombing
-// within it cancels the death entirely (a classic hardcore-shmup mechanic).
 const DEATHBOMB_WINDOW = 0.15
 const DEATHBOMB_IFRAMES = 1.5
-// Danmaku-style: only this tiny box at the ship's core takes hits,
-// so wings can brush through bullet curtains. Scales with the sprites so
-// the hitbox stays the same fraction of the ship on every layout.
 const HITBOX_SIZE = 6 * SPRITE_SCALE
-// On-screen hull height in stage px. The texture's own resolution is divided
-// out at construction, so swapping the art keeps this exact footprint.
 const SHIP_DISPLAY_H = 72
 const BULLET_SPEED = 620
 
-// Vulcan stays focused and flexible; Plasma trades single-target damage for
-// broad screen coverage. Both keep their level while another weapon is active.
 const VULCAN_PATTERNS: [number, number][][] = [
   [[0, -1]],
   [[-0.07, -1], [0.07, -1]],
@@ -53,7 +42,6 @@ export class Player {
   hitbox: Rectangle
   active = true
   firingLaser = false
-
   private fireTimer = 0
   private invincible = 0
   private flashTimer = 0
@@ -65,24 +53,15 @@ export class Player {
   private justDied = false
   private tilt = 0
 
-  constructor(
-    container: Container,
-    texture: Texture,
-    private bulletPool: BulletPool,
-    private plasmaTexture: Texture,
-    private stageW: number,
-    private stageH: number,
-  ) {
+  constructor(container: Container, texture: Texture, private bulletPool: BulletPool, private plasmaTexture: Texture, private stageW: number, private stageH: number) {
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
     this.sprite.x = PLAYFIELD_CENTER
     this.sprite.y = stageH * 0.8
     this.sprite.scale.set(SHIP_DISPLAY_H * SPRITE_SCALE / texture.height)
     container.addChild(this.sprite)
-
     const half = HITBOX_SIZE / 2
     this.hitbox = new Rectangle(-half, -half, HITBOX_SIZE, HITBOX_SIZE)
-
     this.focusDot = new Graphics()
     this.focusDot.circle(0, 0, 5.5 * SPRITE_SCALE).fill({ color: 0xff3366, alpha: 0.55 })
     this.focusDot.circle(0, 0, 2.5 * SPRITE_SCALE).fill(0xffffff)
@@ -92,174 +71,73 @@ export class Player {
 
   get x() { return this.sprite.x }
   get y() { return this.sprite.y }
-
-  get hitboxWorld(): Rectangle {
-    return new Rectangle(
-      this.sprite.x + this.hitbox.x,
-      this.sprite.y + this.hitbox.y,
-      this.hitbox.width,
-      this.hitbox.height,
-    )
-  }
-
+  get hitboxWorld(): Rectangle { return new Rectangle(this.sprite.x + this.hitbox.x, this.sprite.y + this.hitbox.y, this.hitbox.width, this.hitbox.height) }
   get isDead() { return this.state !== 'alive' }
   get inGrace() { return this.state === 'grace' }
 
-  /**
-   * Registers a fatal hit by opening the deathbomb window. Returns true if it
-   * connects. Death isn't final yet — GameApp resolves it via consumeJustDied()
-   * once the window lapses, or cancelDeath() cancels it if the player bombs.
-   */
   hit() {
     if (this.state !== 'alive' || this.invincible > 0) return false
-    this.state = 'grace'
-    this.graceTimer = DEATHBOMB_WINDOW
-    return true
+    this.state = 'grace'; this.graceTimer = DEATHBOMB_WINDOW; return true
   }
-
-  /** Deathbomb — cancel a pending death and grant brief invincibility. */
   cancelDeath() {
     if (this.state !== 'grace') return
-    this.state = 'alive'
-    this.invincible = DEATHBOMB_IFRAMES
-    this.flashTimer = 0
-    this.sprite.tint = 0xffffff
+    this.state = 'alive'; this.invincible = DEATHBOMB_IFRAMES; this.flashTimer = 0; this.sprite.tint = 0xffffff
   }
-
-  /** True on the single frame the death becomes final; GameApp runs the
-   *  explosion / power-drop / life-loss consequences. */
-  consumeJustDied() {
-    if (!this.justDied) return false
-    this.justDied = false
-    return true
-  }
-
-  /** Restore to a clean living state for a new game. */
+  consumeJustDied() { if (!this.justDied) return false; this.justDied = false; return true }
   reset() {
-    this.state = 'alive'
-    this.justDied = false
-    this.graceTimer = 0
-    this.invincible = 0
-    this.tilt = 0
-    this.sprite.rotation = 0
-    this.sprite.visible = true
-    this.sprite.alpha = 1
-    this.sprite.tint = 0xffffff
-    this.sprite.x = PLAYFIELD_CENTER
-    this.sprite.y = this.stageH * 0.8
+    this.state = 'alive'; this.justDied = false; this.graceTimer = 0; this.invincible = 0; this.tilt = 0
+    this.sprite.rotation = 0; this.sprite.visible = true; this.sprite.alpha = 1; this.sprite.tint = 0xffffff
+    this.sprite.x = PLAYFIELD_CENTER; this.sprite.y = this.stageH * 0.8
   }
 
   update(dt: number, actions: Actions) {
-    // Deathbomb window: hold the death for a beat, flashing red so the player
-    // registers the danger and can still bomb out of it.
     if (this.state === 'grace') {
       this.graceTimer -= dt
       this.sprite.tint = Math.sin(this.graceTimer * 80) > 0 ? 0xff4444 : 0xffffff
-      if (this.graceTimer <= 0) {
-        this.sprite.tint = 0xffffff
-        this.state = 'dead'
-        this.justDied = true
-        this.respawnTimer = RESPAWN_DELAY
-        this.sprite.visible = false
-        this.focusDot.visible = false
-      }
+      if (this.graceTimer <= 0) { this.sprite.tint = 0xffffff; this.state = 'dead'; this.justDied = true; this.respawnTimer = RESPAWN_DELAY; this.sprite.visible = false; this.focusDot.visible = false }
       return
     }
-    // Death → respawn sequence: hidden for a beat, then fly in from below
     if (this.state === 'dead') {
       this.respawnTimer -= dt
-      if (this.respawnTimer <= 0) {
-        this.state = 'respawning'
-        this.sprite.visible = true
-        this.sprite.x = PLAYFIELD_CENTER
-        this.sprite.y = this.stageH + 50
-        this.sprite.rotation = 0
-        this.tilt = 0
-        this.invincible = RESPAWN_INVINCIBLE
-        this.flashTimer = 0
-      }
+      if (this.respawnTimer <= 0) { this.state = 'respawning'; this.sprite.visible = true; this.sprite.x = PLAYFIELD_CENTER; this.sprite.y = this.stageH + 50; this.sprite.rotation = 0; this.tilt = 0; this.invincible = RESPAWN_INVINCIBLE; this.flashTimer = 0 }
       return
     }
     if (this.state === 'respawning') {
-      this.sprite.y -= RESPAWN_FLY_SPEED * dt
-      this.invincible -= dt
-      this.flashTimer += dt
+      this.sprite.y -= RESPAWN_FLY_SPEED * dt; this.invincible -= dt; this.flashTimer += dt
       this.sprite.alpha = Math.sin(this.flashTimer * 20) > 0 ? 1 : 0.3
-      if (this.sprite.y <= this.stageH * 0.8) {
-        this.sprite.y = this.stageH * 0.8
-        this.state = 'alive'
-      }
+      if (this.sprite.y <= this.stageH * 0.8) { this.sprite.y = this.stageH * 0.8; this.state = 'alive' }
       return
     }
 
     const { moveX, moveY, fire, focus } = actions
-
     const speed = focus ? SPEED * FOCUS_SPEED_MULT : SPEED
     const len = Math.sqrt(moveX * moveX + moveY * moveY) || 1
-    this.sprite.x += (moveX / len) * speed * dt
-    this.sprite.y += (moveY / len) * speed * dt
-
-    // Touch drag: direct positional control
-    if (actions.touchActive) {
-      this.sprite.x += actions.touchDX
-      this.sprite.y += actions.touchDY
-    }
-
-    const hw = this.sprite.width / 2
-    const hh = this.sprite.height / 2
+    this.sprite.x += (moveX / len) * speed * dt; this.sprite.y += (moveY / len) * speed * dt
+    if (actions.touchActive) { this.sprite.x += actions.touchDX; this.sprite.y += actions.touchDY }
+    const hw = this.sprite.width / 2, hh = this.sprite.height / 2
     this.sprite.x = Math.max(PLAYFIELD_LEFT + hw, Math.min(PLAYFIELD_RIGHT - hw, this.sprite.x))
     this.sprite.y = Math.max(hh, Math.min(this.stageH - hh, this.sprite.y))
+    const tiltInput = Math.max(-1, Math.min(1, moveX + (actions.touchActive ? actions.touchDX * 0.12 : 0)))
+    this.tilt += (tiltInput * BANK_ANGLE - this.tilt) * Math.min(1, 12 * dt); this.sprite.rotation = this.tilt
 
-    // Bank the hull into the strafe direction (lerped, so it eases in/out)
-    const tiltInput = Math.max(-1, Math.min(1,
-      moveX + (actions.touchActive ? actions.touchDX * 0.12 : 0)))
-    this.tilt += (tiltInput * BANK_ANGLE - this.tilt) * Math.min(1, 12 * dt)
-    this.sprite.rotation = this.tilt
-
-    const state = gameStore.getState()
-    const weapon = state.weapon
-    const power = weapon === 'plasma'
-      ? Math.min(4, Math.max(0, state.plasmaPower))
-      : Math.min(4, Math.max(0, state.power))
+    const state = gameStore.getState(); const weapon = state.weapon
+    const power = weapon === 'plasma' ? Math.min(4, Math.max(0, state.plasmaPower)) : Math.min(4, Math.max(0, state.power))
     this.firingLaser = fire && weapon === 'laser' && state.laserPower > 0
-
     const rate = weapon === 'plasma' ? PLASMA_FIRE_RATE[power] : VULCAN_FIRE_RATE[power]
     const pattern = weapon === 'plasma' ? PLASMA_PATTERNS[power] : VULCAN_PATTERNS[power]
     this.fireTimer -= dt
     if (fire && weapon !== 'laser' && this.fireTimer <= 0) {
       this.fireTimer = rate
-      const ox = this.sprite.x
-      const oy = this.sprite.y - 20
+      const ox = this.sprite.x, oy = this.sprite.y - 20
       for (const [nx, ny] of pattern) {
         const plasma = weapon === 'plasma'
-        this.bulletPool.acquire(
-          ox, oy,
-          nx * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED),
-          ny * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED),
-          plasma ? 0.55 : 1,
-          0xffffff,
-          plasma ? 1.1 : 1,
-          plasma ? this.plasmaTexture : undefined,
-          plasma,
-        )
+        this.bulletPool.acquire(ox, oy, nx * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED), ny * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED), plasma ? 0.55 : 1, 0xffffff, plasma ? 1.1 : 1, plasma ? this.plasmaTexture : undefined, plasma, plasma)
       }
       audioSystem.playShoot(power)
     }
 
-    if (this.invincible > 0) {
-      this.invincible -= dt
-      this.flashTimer += dt
-      this.sprite.alpha = Math.sin(this.flashTimer * 20) > 0 ? 1 : 0.3
-    } else {
-      this.sprite.alpha = 1
-    }
-
+    if (this.invincible > 0) { this.invincible -= dt; this.flashTimer += dt; this.sprite.alpha = Math.sin(this.flashTimer * 20) > 0 ? 1 : 0.3 } else this.sprite.alpha = 1
     this.focusDot.visible = focus
-    if (focus) {
-      this.dotPulse += dt
-      this.focusDot.x = this.sprite.x
-      this.focusDot.y = this.sprite.y
-      this.focusDot.scale.set(1 + 0.15 * Math.sin(this.dotPulse * 8))
-    }
+    if (focus) { this.dotPulse += dt; this.focusDot.x = this.sprite.x; this.focusDot.y = this.sprite.y; this.focusDot.scale.set(1 + 0.15 * Math.sin(this.dotPulse * 8)) }
   }
 }
