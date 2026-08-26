@@ -88,6 +88,16 @@ class AudioSystem {
   playSiren() {
     this.fire(SFX.siren)
   }
+
+  /** Gauge just topped out and a burst is available. */
+  playBurstReady() {
+    this.fire(SFX['burst-ready'])
+  }
+
+  /** Ignition. DOUBLE BURST rings a fifth higher so the tiers are audible. */
+  playBurstIgnite(level: number) {
+    this.fire(SFX['burst-ignite'], level >= 2 ? 1.5 : 1)
+  }
 }
 
 export const audioSystem = new AudioSystem()

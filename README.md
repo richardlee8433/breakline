@@ -1,6 +1,6 @@
 # Raiden Pixel Assault
 
-A vertical-scrolling shoot 'em up (shmup) built with React + Pixi.js v8, blending classic Raiden-style action with danmaku (bullet-hell) mechanics: a 6px hitbox, graze scoring, focus movement, a dual weapon system, kill chains, and geometric bullet patterns. Three stages loop endlessly at rising difficulty. Playable in any modern browser — no install required.
+A vertical-scrolling shoot 'em up (shmup) built with React + Pixi.js v8, blending classic Raiden-style action with danmaku (bullet-hell) mechanics: a 6px hitbox, graze scoring, focus movement, an exclusive three-weapon loadout, kill chains, a two-tier BURST gauge, and geometric bullet patterns. Three stages loop endlessly at rising difficulty. Playable in any modern browser — no install required.
 
 ---
 
@@ -22,6 +22,7 @@ npm run dev
 | Fire | Space | Automatic while touching |
 | Focus (slow, shows hitbox) | Hold Shift | — |
 | Bomb (screen clear) | X / B | 💣 button (bottom-right) |
+| BURST (spend a full gauge) | C / V | BURST button (above 💣) |
 | Pause | P / Esc | Tap overlay to resume |
 | Mute / Unmute | M | 🔊 button |
 
@@ -47,7 +48,7 @@ Sprites, hitboxes, bullet size, graze radius, and player speed all scale by the 
 | 2 — Nebula Field | Vivid purple nebula | Interceptor · Gunship | 600 |
 | 3 — Asteroid Belt | Eerie green nebula | Elite · Carrier | 850 |
 
-Each stage scrolls a distinct seamless nebula image (Screaming Brain Studios, CC0) with a faster procedural star layer on top for parallax depth, runs 12–15 timed waves, and ends with a 3-phase boss at 42–46 seconds.
+Each stage scrolls a distinct seamless planetary background with a faster procedural star layer on top for parallax depth, runs 12–15 timed waves, and ends with a 3-phase boss at 42–46 seconds. Every enemy type has dedicated art (`public/assets/enemies/`) with its own engine-exhaust color and glow count.
 
 **Endless loop** — clearing stage 3 wraps back to stage 1 as **LOOP 2**, not a game over. Each loop raises the rank (capped at loop 5), and the stage announcement warns `ENEMY FORCES INTENSIFIED`:
 
@@ -64,36 +65,41 @@ The HUD shows `LOOP n` once you're past the first playthrough.
 
 ## Weapons
 
-Two independent weapons fire together from the same button.
+Three weapons, but only one is ever active — picking up a different weapon's drop switches you to it, keeping that weapon's own level in reserve for when you switch back. The HUD names the equipped weapon instead of showing meter bars.
 
-**BLT — bullets** (`P` pickups, levels 0–4). Pooled shots at 620 px/s; both spread and fire rate improve with level.
+**Vulcan** (`power` pickups, levels 0–4, default at run start). A conventional ballistic weapon: tight, precise spread at the fastest fire rate of the three, no gimmicks — just the most bullets on target per second.
 
-| Level | Shots | Pattern | Fire interval |
+| Level | Shots | Spread | Fire interval |
 |---|---|---|---|
 | 0 | 1 | Straight up | 0.14s |
-| 1 | 2 | ±10° | 0.13s |
-| 2 | 3 | ±15° fan | 0.12s |
-| 3 | 4 | ±8° / ±20° double pair | 0.11s |
-| 4 | 5 | Full fan | 0.10s |
+| 1 | 2 | ±4° | 0.13s |
+| 2 | 3 | ±6° | 0.12s |
+| 3 | 4 | ±5° / ±8° | 0.10s |
+| 4 | 5 | ±5° / ±9° | 0.08s |
 
-**LZR — laser** (`L` pickups, levels 0–5). Once acquired, holding fire also projects a continuous beam straight up from the ship to the top of the screen — four stacked strokes (soft aura → mid glow → inner glow → white-hot core) with a pulsing muzzle ring. Deals 30 damage/second to anything in its column above the ship; bosses resist it heavily (~24.5%) so parking on one can't melt it. Beam width scales 1.25×–2.25× with level.
+**Laser** (`laser` pickups, levels 0–5). Holding fire projects a continuous beam straight up from the ship to the top of the screen — four stacked strokes (soft aura → mid glow → inner glow → white-hot core) with a pulsing muzzle ring. Deals 30 damage/second to anything in its column above the ship. Boss damage scales with level (bosses resist the beam ~75% at baseline, easing as level rises) — roughly 8–21 DPS across levels 1–5 — so a fresh pickup is a real but modest threat to a boss, and a maxed one is worth holding onto through the fight. Beam width scales 1.00×–2.07× with level (each level +20% over the last).
+
+**Plasma** (`plasma` pickups, levels 0–4). The crowd-control option: a wide fan of up to 9 bolts at max level, trading per-bolt damage (0.55×) and speed (0.82×) for coverage — good against a packed formation, weak against a single hard target. Fire rate is the slowest of the three (0.34s–0.24s). A bolt **penetrates enemies** (each one takes damage once, not every frame it overlaps) but still stops on contact with a boss. Fits its energy-orb identity with a defensive trick: a Plasma bolt has a 25% chance to cancel an enemy or boss bullet it touches on contact.
+
+Dying drops two levels of whichever weapon you had equipped (not always Vulcan), scattering two matching pickups at the crash site — so a death doesn't force a weapon switch on top of the setback.
 
 ---
 
 ## Pickups
 
-Destroyed enemies roll a single drop:
+Destroyed enemies roll a single drop, 19% of the time overall:
 
 | Pickup | Chance | Effect |
 |---|---|---|
-| **1UP** | 4% | +1 life (max 5) |
+| **1UP** | 2% | +1 life (max 5) |
 | **B** — bomb | 6% | +1 bomb (max 5) |
-| **L** — laser | 8% | +1 laser level (max 5) |
-| **P** — power | 14% | +1 bullet level (max 4) |
+| Weapon (Vulcan / Laser / Plasma) | 11% | +1 level of the weapon rolled (max 4 or 5), and switches you to it |
+
+The weapon roll is weighted, not an even three-way split — it favors the weapon you already have equipped (so you can build one up instead of getting yanked between weapons) and each stage's featured weapon (stage 1 → Vulcan, stage 2 → Laser, stage 3 → Plasma), with a small baseline chance for the rest.
 
 **Deathbomb** — a fatal hit doesn't kill instantly: the ship flashes red for a 0.15s grace window, and bombing within it cancels the death (spending one bomb, granting 1.5s of invincibility) — a classic hardcore-shmup safety net.
 
-**Death penalty & respawn** — dying drops two bullet levels (two `P` pickups scatter back at the crash site), then after a 1.1s beat the ship flies in from the bottom edge with 3s of invincibility frames. Death also breaks the kill chain.
+**Death penalty & respawn** — dying drops two levels of your currently equipped weapon (two matching pickups scatter back at the crash site), then after a 1.1s beat the ship flies in from the bottom edge with 3s of invincibility frames. Death also breaks the kill chain.
 
 ---
 
@@ -101,7 +107,7 @@ Destroyed enemies roll a single drop:
 
 **Tiny hitbox** — only a 6px point at the ship's core takes damage. Wings brushing through bullet curtains are safe; hold Shift to move at 40% speed and see the glowing hitbox dot.
 
-**Graze** — enemy bullets passing within 22px of the hitbox without hitting award +50 points each (once per bullet), with a high-pitched tick. The HUD tracks your total graze count.
+**Graze** — enemy bullets passing within 22px of the hitbox without hitting award +50 points each (once per bullet), with a high-pitched tick, **and charge the BURST gauge by 0.7**. That last part is what makes grazing worth the risk: flying into a curtain is the fastest way to buy your next power spike, not just a score trickle. The HUD tracks your total graze count.
 
 **Geometric bullet patterns** — enemy fire is choreographed with polar-coordinate emitters (`BulletPatterns.ts`):
 
@@ -116,6 +122,37 @@ Enemy bullets are glowing neon rounds (pink for enemies, cyan for bosses) genera
 
 ---
 
+## BURST
+
+Chain already multiplied score, but nothing about the ship changed as it climbed — a 20-kill chain felt identical to a 2-kill one. **BURST** closes that gap: the gauge you fill by playing dangerously buys a window where the ship actually hits harder.
+
+**Charging** — the gauge fills from two sources, and the graze half is the point: it welds the danmaku layer onto the scoring layer.
+
+| Source | Gauge |
+|---|---|
+| Graze (per bullet) | +0.7 |
+| Kill | +0.8 + `scoreValue` / 300 (≈1.1 for a fighter, ≈2.5 for a carrier) |
+
+**Spending** — at a full gauge the HUD meter turns gold and reads `BURST READY [C]`. Pressing C/V ignites:
+
+| | BURST | DOUBLE BURST |
+|---|---|---|
+| Damage | ×2 | ×3 |
+| Fire interval | ×0.70 | ×0.55 |
+| Score multiplier | ×2 | ×4 — *stacked on top of the chain tier, so a ×8 chain becomes ×32* |
+| Gauge drain | 12.5 / s (8s untended) | 20 / s (5s untended) |
+| Hull tint | Amber | Magenta |
+
+Ignition cancels every hostile bullet on screen and **mints a gem from each one** (capped at 18, so one activation can't drain the gem pool) — the reward for bursting *inside* a curtain is the curtain itself. It also fires a shockwave, a short hitstop, and 0.7s of invincibility.
+
+**The gauge is the burst's own fuel.** It drains while a burst runs, but kills and grazes keep topping it up, so a strong run extends its own window — and if you refill it to full before it empties, pressing the key again upgrades to **DOUBLE BURST** and refreshes the meter rather than ending it. That's the ceiling: there is no third tier.
+
+Every player damage source scales with the tier, Laser included, so bursting never punishes your weapon choice. Ignition is edge-triggered — holding the key through a charging gauge won't auto-spend it the instant it tops out. Dying ends any active burst and halves the gauge; a stage transition ends the burst but keeps the charge.
+
+All of it is tuning data in [`src/game/data/burst.ts`](src/game/data/burst.ts).
+
+---
+
 ## Scoring
 
 **Kill chain** — consecutive kills build a chain that lapses after 2 seconds of silence (or on death). Its tier multiplies every kill's score, and the HUD chain counter grows and shifts color as it climbs:
@@ -125,6 +162,8 @@ Enemy bullets are glowing neon rounds (pink for enemies, cyan for bosses) genera
 | 5+ | ×2 | Yellow |
 | 10+ | ×4 | Orange |
 | 20+ | ×8 | Pink |
+
+An active BURST multiplies on top of this tier, so the practical ceiling is ×32 per kill.
 
 **Floating score popups** — every kill spawns a pooled `+300`-style number at the kill site that drifts up and fades, tinted to the chain tier so the multiplier is readable without looking at the HUD.
 
@@ -142,6 +181,8 @@ Every boss entrance is announced by a flashing **WARNING** banner and air-raid s
 - **Phase 2** (67–33% HP) — faster sweep · 3-arm spiral with a wide aimed fan every 4th volley
 - **Phase 3** (33–0% HP) — erratic movement · dense 4-arm spiral + expanding flower bursts
 
+**Persistent damage feedback** — below 67% HP the hull shows 2 burning wound sites (4 below 33%), each a flickering fire-and-smoke decal anchored to a boss-specific location; the hull's tint darkens toward char as HP drops. Every hit also flashes a brief impact burst at the exact point of contact and kicks a short, decaying camera shake, with a bigger jolt on each phase transition — so damage reads continuously, not just from the HP bar.
+
 Killing one runs a death spectacle — cascading explosions, hitstop, screen shake, a gem burst, and a full-screen vacuum.
 
 ---
@@ -154,7 +195,8 @@ Killing one runs a death spectacle — cascading explosions, hitstop, screen sha
 | Engine exhaust | Always on | Blue flame particles streaming from the ship's tail (48-particle pool) |
 | Hull banking | Strafing | Lerped ±0.22 rad tilt into the movement direction |
 | Bullet trails | Every player shot | White-hot core → yellow → orange, 22px gradient behind each bullet |
-| Enemy hit flash | Non-lethal hit | 0.07s red tint so damage reads instantly |
+| Enemy hit flash | Non-lethal hit | Red tint plus a 6-point spark burst at the impact point |
+| Enemy engine glow | Always on | Per-enemy exhaust flicker, color and count set per enemy type |
 | Hitstop | Impacts | Freeze-frame: kill 0.025s · boss death 0.12s · bomb 0.08s · player death 0.15s |
 | Bomb shockwave | Bomb | Expanding ring from the ship (replaces a flat white flash) |
 | Boss WARNING | Boss approach | Field clears, flashing red banner + air-raid siren for 2.4s |
@@ -192,6 +234,8 @@ Two playback paths, chosen deliberately:
 | Rising ping | Gem collected (pitch climbs a semitone per streak) | `gem` |
 | High tick | Graze (near-miss) | `graze` |
 | Air-raid siren | Boss WARNING | `alarm3` |
+| Ready chime | BURST gauge tops out | `pickup-alt` |
+| Ignition hit | BURST activated (a fifth higher for DOUBLE) | `bigshot3` |
 
 Twenty more variants ship in `public/assets/audio/sfx/` (extra alarms, lasers, big shots) for auditioning alternatives without re-downloading.
 
@@ -206,7 +250,7 @@ Twenty more variants ship in `public/assets/audio/sfx/` (extra alarms, lasers, b
 | Post-processing | pixi-filters (AdvancedBloomFilter) |
 | State | Zustand 5 |
 | Language | TypeScript 5.6 |
-| Assets | Kenney Pixel Shmup (CC0) · Screaming Brain Studios space backgrounds (CC0) |
+| Assets | Kenney Pixel Shmup (CC0) for bullets/tiles, plus custom ship/enemy/pickup art and backgrounds — see [License](#license) |
 | Audio | OGG Vorbis samples · Web Audio API (SFX) + `<audio>` streaming (music) |
 
 ---
@@ -220,17 +264,19 @@ src/
     core/       GameApp.ts          — Pixi Application, main ticker, stage transitions
     data/       stages.ts           — Per-stage wave/boss config
                 enemies.ts          — Enemy stat table
+                burst.ts            — BURST gauge rates and per-tier multipliers
                 audio.ts            — Sound manifest: file, gain, throttle, detune
-    entities/   Player.ts           — Movement, focus, 6px hitbox, banking, deathbomb, respawn
-                Enemy.ts            — Move paths: straight/zigzag/dive/diagonal · fire patterns
-                Boss.ts             — 3-phase danmaku boss with per-stage + per-loop scaling
-                BulletPool.ts       — Object pool (zero new in game loop)
-                Pickup.ts           — Power / bomb / laser / 1UP drops
+    entities/   Player.ts           — Movement, focus, 6px hitbox, banking, deathbomb, respawn, BURST scaling
+                Enemy.ts            — Move paths: straight/zigzag/sine/swoop/dive/diagonal · fire patterns · per-type engine glow + hit sparks
+                Boss.ts             — 3-phase danmaku boss with per-stage + per-loop scaling, persistent damage decals, impact FX
+                BulletPool.ts       — Object pool (zero new in game loop); per-shot damage/tint/scale/texture, Plasma bullet-cancel flag
+                Pickup.ts           — Power / bomb / laser / plasma / 1UP drops
                 Gem.ts              — Score gems with magnet attraction
     systems/    InputSystem.ts      — Unified action map (keyboard + touch drag)
                 BulletPatterns.ts   — Polar-coordinate danmaku emitters (ring/spiral/flower/fan)
                 WaveSystem.ts       — Timed wave spawner with per-loop rank scaling
-                CollisionSystem.ts  — AABB collision, graze detection, drop rolls
+                DropSystem.ts       — Weighted enemy-kill drop table (weapon rolls favor equipped + stage weapon)
+                CollisionSystem.ts  — AABB collision, graze detection, drop rolls, Plasma-vs-hostile-bullet cancel
                 ScrollSystem.ts     — Seamless nebula tile + parallax stars (3 themes)
                 SampleBank.ts       — Fetch/decode/play pooled one-shot samples
                 AudioSystem.ts      — Game-event → sample mapping
@@ -245,8 +291,8 @@ src/
                 BulletTrail.ts      — Per-frame gradient trail behind player bullets
                 GlowTexture.ts      — Procedural neon glow bullet + gem textures
                 ScreenShake.ts      — Stage offset with exponential decay
-  store/        gameStore.ts        — Zustand: score, chain, loop, lives, power, laser, stage
-  ui/           HUD.tsx             — React overlay (score/chain/meters/boss HP, wing or bar layout)
+  store/        gameStore.ts        — Zustand: score, chain, burst gauge + tier, loop, lives, equipped weapon + its level, stage
+  ui/           HUD.tsx             — React overlay (score/chain/BURST meter/equipped weapon/boss HP, wing or bar layout)
                 TitleScreen.tsx
                 GameOverScreen.tsx
                 StageClearScreen.tsx
@@ -271,8 +317,9 @@ All assets are CC0 (public domain):
 
 | Asset | Source |
 |---|---|
-| Sprites | [Kenney Pixel Shmup](https://kenney.nl/assets/pixel-shmup) |
-| Backgrounds | [Screaming Brain Studios — Seamless Space Backgrounds](https://opengameart.org/content/seamless-space-backgrounds) |
+| Bullets & tiles | [Kenney Pixel Shmup](https://kenney.nl/assets/pixel-shmup) |
+| Ships, enemy & pickup art | Custom (`public/assets/ships`, `public/assets/enemies`, `public/assets/pickups`) — **source/license not yet recorded, confirm before any public release** |
+| Backgrounds | `public/assets/bg` carries a Screaming Brain Studios CC0 notice from an earlier version of these files; the current planetary artwork's own source isn't recorded — **confirm before any public release** |
 | Music | [SketchyLogic — NES Shooter Music](https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles) |
 | Weapon & explosion SFX | [RUOK — Action Game/SHMUP SFX Pack](https://opengameart.org/content/action-gameshmup-sfx-pack) |
 | UI SFX | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) |

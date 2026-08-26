@@ -12,7 +12,7 @@ export type SfxKey =
   | 'shoot' | 'boss-hurt' | 'bomb' | 'player-hit' | 'siren'
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
   | 'pickup-power' | 'pickup-bomb' | 'pickup-life'
-  | 'gem' | 'graze'
+  | 'gem' | 'graze' | 'burst-ready' | 'burst-ignite'
 
 export interface SfxDef {
   /** File name inside SFX_DIR. */
@@ -48,6 +48,10 @@ export const SFX: Record<SfxKey, SfxDef> = {
   'pickup-life':     { src: 'pickup-life.ogg',  gain: 0.60 },
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },
+  // BURST: a bright confirm the instant the gauge tops out, and a heavy hit
+  // on ignition. Throttled because a topped-out gauge keeps being topped out.
+  'burst-ready':     { src: 'pickup-alt.ogg',   gain: 0.45, throttleMs: 900 },
+  'burst-ignite':    { src: 'bigshot3.ogg',     gain: 0.75 },
 }
 
 export type MusicKey =

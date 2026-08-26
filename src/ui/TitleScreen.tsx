@@ -48,8 +48,11 @@ export function TitleScreen() {
       <div style={{ marginTop: 48, fontSize: 10, color: '#555', lineHeight: 1.8 }}>
         MOVE: ARROW KEYS / WASD<br />
         FIRE: SPACE &nbsp;&nbsp; BOMB: X / B<br />
-        FOCUS (SLOW): HOLD SHIFT<br />
-        PAUSE: P / ESC
+        BURST: C / V &nbsp;&nbsp; FOCUS (SLOW): HOLD SHIFT<br />
+        PAUSE: P / ESC<br />
+        <span style={{ color: '#7a6a33' }}>
+          GRAZE  AND  KILL  TO  CHARGE  BURST
+        </span>
       </div>
     </div>
   )
