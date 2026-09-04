@@ -3,6 +3,9 @@ export const VIVERSE_APP_ID = 'jpr6pvkrcm'
 export const LEADERBOARD_NAME = 'highest-score'
 
 const PENDING_SCORE_KEY = 'raiden.viversePendingScore'
+const SDK_LOAD_TIMEOUT_MS = 5000
+const API_TIMEOUT_MS = 5000
+const AUTH_TIMEOUT_MS = 1800
 
 type AuthResult = {
   access_token: string
@@ -59,11 +62,21 @@ declare global {
 let sdkPromise: Promise<ViverseSdk> | null = null
 let clientPromise: Promise<ViverseClient> | null = null
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = window.setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      (value) => { window.clearTimeout(id); resolve(value) },
+      (error) => { window.clearTimeout(id); reject(error) },
+    )
+  })
+}
+
 function loadSdk(): Promise<ViverseSdk> {
   if (window.viverse) return Promise.resolve(window.viverse)
   if (sdkPromise) return sdkPromise
 
-  sdkPromise = new Promise((resolve, reject) => {
+  sdkPromise = withTimeout(new Promise<ViverseSdk>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${VIVERSE_SDK_URL}"]`)
     const script = existing ?? document.createElement('script')
 
@@ -80,6 +93,9 @@ function loadSdk(): Promise<ViverseSdk> {
       script.async = true
       document.head.appendChild(script)
     }
+  }), SDK_LOAD_TIMEOUT_MS, 'VIVERSE SDK load timeout').catch((error) => {
+    sdkPromise = null
+    throw error
   })
 
   return sdkPromise
@@ -90,7 +106,10 @@ async function getClient(): Promise<ViverseClient> {
   clientPromise = loadSdk().then((sdk) => new sdk.client({
     clientId: VIVERSE_APP_ID,
     domain: 'account.htcvive.com',
-  }))
+  })).catch((error) => {
+    clientPromise = null
+    throw error
+  })
   return clientPromise
 }
 
@@ -111,25 +130,38 @@ const baseConfig: LeaderboardConfig = {
   around_user: false,
 }
 
+async function tryAuth(): Promise<AuthResult | undefined> {
+  try {
+    const client = await getClient()
+    return await withTimeout(client.checkAuth(), AUTH_TIMEOUT_MS, 'VIVERSE auth timeout')
+  } catch {
+    // Netlify/external hosting may not have a usable VIVERSE SSO context.
+    // Leaderboard viewing must still work through the guest API.
+    return undefined
+  }
+}
+
 export async function getViverseAuth(): Promise<AuthResult | undefined> {
-  const client = await getClient()
-  return client.checkAuth()
+  return tryAuth()
 }
 
 export async function fetchGlobalTop10(): Promise<{ entries: ViverseRankingEntry[]; loggedIn: boolean }> {
-  const [sdk, client] = await Promise.all([loadSdk(), getClient()])
-  const auth = await client.checkAuth()
+  const sdk = await loadSdk()
 
-  let result: LeaderboardResponse
-  if (auth?.access_token) {
-    result = await dashboard(sdk, auth.access_token).getLeaderboard(VIVERSE_APP_ID, baseConfig)
-  } else {
-    result = await dashboard(sdk).getGuestLeaderboard(VIVERSE_APP_ID, {
+  // Do not block the public leaderboard on authentication. VIVERSE exposes a
+  // dedicated guest endpoint, so Netlify builds can show scores even when SSO
+  // is unavailable outside a VIVERSE-hosted experience.
+  const guestPromise = withTimeout(
+    dashboard(sdk).getGuestLeaderboard(VIVERSE_APP_ID, {
       ...baseConfig,
       country_code: 'US',
-    })
-  }
+    }),
+    API_TIMEOUT_MS,
+    'VIVERSE leaderboard timeout',
+  )
+  const authPromise = tryAuth()
 
+  const [result, auth] = await Promise.all([guestPromise, authPromise])
   const entries = (result.ranking ?? [])
     .slice()
     .sort((a, b) => a.rank - b.rank)
@@ -140,13 +172,17 @@ export async function fetchGlobalTop10(): Promise<{ entries: ViverseRankingEntry
 
 export async function submitViverseScore(score: number): Promise<boolean> {
   if (!Number.isFinite(score) || score < 0) return false
-  const [sdk, client] = await Promise.all([loadSdk(), getClient()])
-  const auth = await client.checkAuth()
+  const sdk = await loadSdk()
+  const auth = await tryAuth()
   if (!auth?.access_token) return false
 
-  await dashboard(sdk, auth.access_token).uploadLeaderboardScore(VIVERSE_APP_ID, [
-    { name: LEADERBOARD_NAME, value: String(Math.floor(score)) },
-  ])
+  await withTimeout(
+    dashboard(sdk, auth.access_token).uploadLeaderboardScore(VIVERSE_APP_ID, [
+      { name: LEADERBOARD_NAME, value: String(Math.floor(score)) },
+    ]),
+    API_TIMEOUT_MS,
+    'VIVERSE score upload timeout',
+  )
   return true
 }
 
@@ -155,7 +191,7 @@ export async function loginToSubmitScore(score: number) {
     localStorage.setItem(PENDING_SCORE_KEY, String(Math.max(0, Math.floor(score))))
   } catch { /* localStorage may be unavailable in privacy modes */ }
 
-  const client = await getClient()
+  const client = await withTimeout(getClient(), SDK_LOAD_TIMEOUT_MS, 'VIVERSE login unavailable')
   client.loginWithWorlds({ state: 'neon-raiden-leaderboard' })
 }
 
