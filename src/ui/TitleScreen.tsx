@@ -1,21 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
-import { submitPendingViverseScore } from '../services/viverseLeaderboard'
 
 export function TitleScreen() {
   const { hiScore, reset } = useGameStore()
   const [blink, setBlink] = useState(true)
-  const [syncStatus, setSyncStatus] = useState('')
 
   useEffect(() => {
-    submitPendingViverseScore()
-      .then((submitted) => {
-        if (!submitted) return
-        setSyncStatus('VIVERSE SCORE SYNCED')
-        window.setTimeout(() => setSyncStatus(''), 3500)
-      })
-      .catch(() => { /* login may have been cancelled; keep the pending score */ })
-
     const id = setInterval(() => setBlink((b) => !b), 500)
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.code === 'Enter') reset()
@@ -48,13 +38,8 @@ export function TitleScreen() {
       <div style={{ marginTop: 40, fontSize: 11, color: '#888' }}>
         HI-SCORE  {String(hiScore).padStart(6, '0')}
       </div>
-      {syncStatus && (
-        <div style={{ marginTop: 10, fontSize: 10, color: '#77ff99', letterSpacing: 2 }}>
-          {syncStatus}
-        </div>
-      )}
       <div style={{
-        marginTop: syncStatus ? 20 : 32, fontSize: 14, letterSpacing: 3,
+        marginTop: 32, fontSize: 14, letterSpacing: 3,
         color: blink ? '#ffff00' : 'transparent',
         transition: 'color 0.1s',
       }}>
