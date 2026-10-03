@@ -22,24 +22,25 @@ export interface ChaseWave {
 }
 
 /**
- * A stretch of asteroid field. Rocks come in rows; every row leaves one
- * clear lane at least `gap` wide, and the lane moves at most `drift` per
- * row, so the way through is always reachable at the ship's speed (rows are
- * spaced far enough apart to cross between them).
+ * A stretch of asteroid field. Rocks arrive at random moments (a Poisson
+ * process, `rate` per second on average) at random places, kept apart by a
+ * minimum spacing (Poisson-disk / blue-noise placement), so the field has
+ * no rows and no clumps. One clear path at least `gap` wide winds through
+ * it; its center wanders smoothly (1D value noise) at most `wander` px per
+ * second of travel, slow enough to follow at the ship's speed.
  */
 export interface RockSegment {
   from: number
   to: number
-  /** Seconds between rows. */
-  every: number
-  /** 0–1: how much of each row (outside the lane) holds rocks. */
-  fill: number
+  /** Average rocks per second. Placement rejects some, so the real count
+   *  runs a little lower in tight stretches. */
+  rate: number
   /** Relative odds of small / medium / large. */
   sizes: Record<RockSize, number>
-  /** Clear lane width, base px. */
+  /** Clear path width, base px. */
   gap: number
-  /** Most the clear lane shifts from one row to the next, base px. */
-  drift: number
+  /** Fastest the clear path drifts sideways, base px per second. */
+  wander: number
 }
 
 /** single: one mine. pair: two side by side. gate: a row across the field
@@ -117,26 +118,25 @@ const stage1: StageConfig = {
 // Stage 2 — the asteroid shortcut, 180 s. Rocks ahead, pursuers behind
 // from the first seconds.
 //   0–36    a busy field of small and medium rocks: learn the markers
-//   36–90   denser, the clear lane drifts more
+//   36–90   denser, the clear path wanders more
 //   90–108  a lighter stretch…
 //   108–126 …then big rocks
-//   126–162 the densest part (rocks never close every lane)
+//   126–162 the densest part (the clear path is always there)
 //   162–180 the field thins out toward the exit
-// Every `drift` stays below `gap` minus the ship's width, so consecutive
-// lanes always overlap by more than the ship: the way through never asks
-// for a sideways dash between rows.
+// Size odds lean small, the way real belts do (many small bodies, few big
+// ones), but far less steeply than nature's D^-2.5 so big rocks still show.
 const stage2: StageConfig = {
   id: 2,
   bgTheme: 'asteroid',
   duration: 180,
   mission: '穿越小行星帶',
   rocks: [
-    { from: 1,   to: 36,  every: 1.4,  fill: 0.8,  sizes: { small: 5, medium: 4, large: 1 }, gap: 200, drift: 60 },
-    { from: 36,  to: 90,  every: 1.2,  fill: 0.85, sizes: { small: 3, medium: 4, large: 2 }, gap: 185, drift: 70 },
-    { from: 90,  to: 108, every: 1.6,  fill: 0.65, sizes: { small: 5, medium: 3, large: 0 }, gap: 200, drift: 50 },
-    { from: 108, to: 126, every: 1.35, fill: 0.9,  sizes: { small: 1, medium: 3, large: 4 }, gap: 185, drift: 60 },
-    { from: 126, to: 162, every: 1.15, fill: 0.9,  sizes: { small: 3, medium: 4, large: 2 }, gap: 175, drift: 75 },
-    { from: 162, to: 176, every: 1.6,  fill: 0.6,  sizes: { small: 5, medium: 2, large: 0 }, gap: 200, drift: 50 },
+    { from: 1,   to: 36,  rate: 3.0, sizes: { small: 5, medium: 4, large: 1 }, gap: 200, wander: 45 },
+    { from: 36,  to: 90,  rate: 4.0, sizes: { small: 3, medium: 4, large: 2 }, gap: 185, wander: 60 },
+    { from: 90,  to: 108, rate: 2.4, sizes: { small: 5, medium: 3, large: 0 }, gap: 200, wander: 40 },
+    { from: 108, to: 126, rate: 3.0, sizes: { small: 1, medium: 3, large: 4 }, gap: 185, wander: 50 },
+    { from: 126, to: 162, rate: 4.6, sizes: { small: 3, medium: 4, large: 2 }, gap: 175, wander: 65 },
+    { from: 162, to: 176, rate: 2.2, sizes: { small: 5, medium: 2, large: 0 }, gap: 200, wander: 40 },
   ],
   waves: [
     w(3, 'drone', 1, 'center'),

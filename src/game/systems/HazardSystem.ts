@@ -16,12 +16,25 @@ const BLAST = MINE.blastRadius * K
 const MINE_R = (MINE.dia * K) / 2
 const SIZES = Object.keys(ROCK.sizes) as RockSize[]
 const rand = (a: number, b: number) => a + Math.random() * (b - a)
+/** Seconds between the clear path's control points (value noise). */
+const PATH_STEP = 1.2
+/** Extra clearance kept between any two rocks (blue-noise spacing). */
+const ROCK_SPACING = 6 * K
+/** Placement attempts per arriving rock before it is dropped. */
+const TRIES = 8
+/** Every rock's center starts on this line, whatever its size, so that
+ *  entry time maps to height the same way for all of them (the spacing and
+ *  clear-path checks rely on it). */
+const ROCK_Y0 = -(Math.max(...SIZES.map((s) => ROCK.sizes[s].dia)) * K) / 2
 
 interface Rock { sprite: Sprite; active: boolean; r: number; spin: number }
 /** idle → (ship within the trigger radius) armed → (fuse) blast → gone */
 interface Mine { sprite: Sprite; active: boolean; state: 'idle' | 'armed' | 'blast'; t: number }
 /** A hazard due to enter at `at`; its marker shows for the preview before. */
 interface Pending { at: number; mine: boolean; x: number; size: RockSize; preview: number }
+/** A placed rock, for spacing checks: all rocks fall at one speed, so the
+ *  field is rigid and entry time stands in for height. */
+interface Placed { at: number; x: number; r: number }
 
 /**
  * Terrain ahead of the ship: asteroid rows (stage 2) and pre-laid proximity
@@ -37,8 +50,10 @@ export class HazardSystem {
   private segs: RockSegment[] = []
   private mineWaves: MineWave[] = []
   private nextMine = 0
-  private nextRow = 0
-  private lane = -1
+  private nextArrival = 0
+  private placed: Placed[] = []
+  /** Clear path center at each PATH_STEP of entry time. */
+  private path: number[] = []
   private elapsed = 0
   private age = 0
   /** Something of each kind has come on screen this stage (for prompts). */
@@ -71,8 +86,9 @@ export class HazardSystem {
     this.segs = cfg.rocks ?? []
     this.mineWaves = cfg.mines ?? []
     this.nextMine = 0
-    this.nextRow = 0
-    this.lane = -1
+    this.nextArrival = 0
+    this.placed.length = 0
+    this.path.length = 0
     this.elapsed = 0
     this.rocksSeen = this.minesSeen = false
     this.clear()
@@ -145,41 +161,69 @@ export class HazardSystem {
     this.draw()
   }
 
-  /** Queue rows and mine patterns whose time has come; each enters after
-   *  its preview. */
+  /** Queue the rocks and mine patterns whose time has come; each enters
+   *  after its preview. */
   private schedule() {
     const t = this.elapsed
     while (this.nextMine < this.mineWaves.length && t >= this.mineWaves[this.nextMine].time) {
       this.queueMines(this.mineWaves[this.nextMine++])
     }
     const seg = this.segs.find((s) => t >= s.from && t < s.to)
-    if (seg && t >= this.nextRow) {
-      this.queueRow(seg)
-      this.nextRow = t + seg.every
+    if (!seg) { this.nextArrival = Math.max(this.nextArrival, t); return }
+    // Poisson arrivals: exponential gaps between rocks, so there is no beat
+    // to read and no rows.
+    while (this.nextArrival <= t) {
+      this.placeRock(seg, this.nextArrival + ROCK.preview)
+      this.nextArrival += -Math.log(1 - Math.random()) / seg.rate
+    }
+    while (this.placed.length && this.placed[0].at < t - 1) this.placed.shift()
+  }
+
+  /** Dart-throwing placement: a random x, kept off the clear path for the
+   *  rock's whole height and at least ROCK_SPACING from every other rock.
+   *  A rock that finds no spot in a few tries is dropped. */
+  private placeRock(seg: RockSegment, at: number) {
+    const total = SIZES.reduce((n, s) => n + seg.sizes[s], 0)
+    let pick = Math.random() * total
+    const size = SIZES.find((s) => (pick -= seg.sizes[s]) < 0) ?? 'small'
+    const r = (ROCK.sizes[size].dia * K) / 2
+    const half = (seg.gap * K) / 2
+    const span = r / ROCK_V   // entry-time extent of the rock's height
+    for (let i = 0; i < TRIES; i++) {
+      const x = rand(PLAYFIELD_LEFT + r * 0.3, PLAYFIELD_RIGHT - r * 0.3)
+      if (Math.abs(x - this.pathAt(at - span)) < half + r ||
+          Math.abs(x - this.pathAt(at)) < half + r ||
+          Math.abs(x - this.pathAt(at + span)) < half + r) continue
+      let clear = true
+      for (const o of this.placed) {
+        const dx = o.x - x, dy = (o.at - at) * ROCK_V, min = o.r + r + ROCK_SPACING
+        if (dx * dx + dy * dy < min * min) { clear = false; break }
+      }
+      if (!clear) continue
+      this.placed.push({ at, x, r })
+      this.pending.push({ at, mine: false, x, size, preview: ROCK.preview })
+      this.pending.sort((a, b) => a.at - b.at)
+      return
     }
   }
 
-  /** One row of rocks with a clear lane at least seg.gap wide, the lane
-   *  shifted at most seg.drift from the last row's. */
-  private queueRow(seg: RockSegment) {
-    const gap = seg.gap * K, drift = seg.drift * K
-    const minC = PLAYFIELD_LEFT + gap / 2 + 8 * K, maxC = PLAYFIELD_RIGHT - gap / 2 - 8 * K
-    this.lane = this.lane < 0 ? rand(minC, maxC)
-      : Math.max(minC, Math.min(maxC, this.lane + rand(-drift, drift)))
-    const gl = this.lane - gap / 2, gr = this.lane + gap / 2
-    const total = SIZES.reduce((n, s) => n + seg.sizes[s], 0)
-    let x = PLAYFIELD_LEFT + rand(-12, 16) * K
-    while (x < PLAYFIELD_RIGHT) {
-      let pick = Math.random() * total
-      const size = SIZES.find((s) => (pick -= seg.sizes[s]) < 0) ?? 'small'
-      const d = ROCK.sizes[size].dia * K
-      if (x + d > gl && x < gr) { x = gr + rand(2, 12) * K; continue }   // keep the lane clear
-      if (Math.random() < seg.fill) {
-        this.pending.push({ at: this.elapsed + ROCK.preview + rand(0, 0.15), mine: false, x: x + d / 2, size, preview: ROCK.preview })
-      }
-      x += d + rand(4, 18) * K
+  /** The clear path's center for a given entry time: random control
+   *  points every PATH_STEP, each at most `wander`·PATH_STEP from the last,
+   *  eased between (smoothstep), so it bends but never jumps. */
+  private pathAt(at: number): number {
+    const u = Math.max(0, at) / PATH_STEP
+    const k = Math.floor(u), f = u - k
+    while (this.path.length <= k + 1) {
+      const n = this.path.length
+      const seg = this.segs.find((s) => n * PATH_STEP >= s.from && n * PATH_STEP < s.to) ?? this.segs[0]
+      const half = ((seg?.gap ?? 200) * K) / 2
+      const lo = PLAYFIELD_LEFT + half + 8 * K, hi = PLAYFIELD_RIGHT - half - 8 * K
+      const prev = n ? this.path[n - 1] : rand(lo, hi)
+      const step = (seg?.wander ?? 50) * K * PATH_STEP
+      this.path.push(Math.max(lo, Math.min(hi, prev + rand(-step, step))))
     }
-    this.pending.sort((a, b) => a.at - b.at)
+    const a = this.path[k], b = this.path[k + 1]
+    return a + (b - a) * f * f * (3 - 2 * f)
   }
 
   private queueMines(wave: MineWave) {
@@ -222,7 +266,7 @@ export class HazardSystem {
     s.scale.set(d / Math.max(tex.width, tex.height))
     if (Math.random() < 0.5) s.scale.x *= -1
     s.rotation = rand(0, Math.PI * 2)
-    s.x = p.x; s.y = -d / 2
+    s.x = p.x; s.y = ROCK_Y0
     s.visible = true
   }
 
