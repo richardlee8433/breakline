@@ -36,7 +36,12 @@ class AudioSystem {
 
   private fire(def: typeof SFX[keyof typeof SFX], rate = 1, gain = 1) {
     if (!this.getCtx()) return
-    sampleBank.play(def, rate, gain)
+    sampleBank.play(def, rate, gain * gameStore.getState().sfxVolume)
+  }
+
+  /** Settings screen: a short, recognisable cue to judge the SFX level by. */
+  playPreview() {
+    this.fire(SFX['counter-ready'])
   }
 
   // ── weapons ─────────────────────────────────────────────────────────────

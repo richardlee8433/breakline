@@ -63,6 +63,9 @@ interface GameState {
   bossActive: boolean
   bossWarning: boolean
   soundEnabled: boolean
+  /** 0–1, multiplied into every music / sfx level. Persisted locally. */
+  musicVolume: number
+  sfxVolume: number
   paused: boolean
   /** false = A/B control build: same arena, core switched off. */
   coreEnabled: boolean
@@ -86,6 +89,8 @@ interface GameState {
   setBossWarning: (v: boolean) => void
   advanceStage: () => void
   toggleSound: () => void
+  setMusicVolume: (v: number) => void
+  setSfxVolume: (v: number) => void
   togglePause: () => void
 }
 
@@ -101,6 +106,23 @@ const freshPlay = {
 }
 
 const SOUND_KEY = 'breakline.soundEnabled'
+const MUSIC_VOL_KEY = 'breakline.musicVolume'
+const SFX_VOL_KEY = 'breakline.sfxVolume'
+
+function loadVolume(key: string): number {
+  try {
+    const v = parseFloat(localStorage.getItem(key) ?? '')
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1
+  } catch {
+    return 1
+  }
+}
+
+function saveVolume(key: string, v: number) {
+  try {
+    localStorage.setItem(key, String(v))
+  } catch { /* ignore */ }
+}
 const HISCORE_KEY = 'breakline.hiScore'
 
 function loadSoundPref(): boolean {
@@ -137,6 +159,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   hiScore: loadHiScore(),
   phase: 'title',
   soundEnabled: loadSoundPref(),
+  musicVolume: loadVolume(MUSIC_VOL_KEY),
+  sfxVolume: loadVolume(SFX_VOL_KEY),
   coreEnabled: true,
 
   addScore: (n) => set((s) => {
@@ -198,6 +222,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       bossActive: false,
     }
   }),
+  setMusicVolume: (v) => {
+    const musicVolume = Math.min(1, Math.max(0, v))
+    saveVolume(MUSIC_VOL_KEY, musicVolume)
+    set({ musicVolume })
+  },
+  setSfxVolume: (v) => {
+    const sfxVolume = Math.min(1, Math.max(0, v))
+    saveVolume(SFX_VOL_KEY, sfxVolume)
+    set({ sfxVolume })
+  },
   toggleSound: () => set((s) => {
     const soundEnabled = !s.soundEnabled
     saveSoundPref(soundEnabled)

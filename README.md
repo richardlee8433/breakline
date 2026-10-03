@@ -22,6 +22,7 @@ npm run dev
 | Counter（反擊，30 能源） | E / C | COUNTER 按鈕 |
 | Pause | P / Esc | 點擊畫面 |
 | Mute | M | 🔊 |
+| Settings（音樂 / 音效音量） | 首頁按 O | 首頁 SETTINGS 按鈕 |
 
 ## 核心玩法
 

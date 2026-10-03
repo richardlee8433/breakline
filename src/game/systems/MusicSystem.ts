@@ -16,19 +16,26 @@ class MusicSystem {
   private cache = new Map<MusicKey, HTMLAudioElement>()
   private active = new Set<HTMLAudioElement>()
   private fades = new Map<HTMLAudioElement, ReturnType<typeof setInterval>>()
+  /** Tracks fading out to a stop; a level change must not resurrect them. */
+  private stopping = new Set<HTMLAudioElement>()
   private handoff: ReturnType<typeof setTimeout> | null = null
   private current: MusicKey | null = null
 
   constructor() {
     gameStore.subscribe((s, prev) => {
-      if (s.soundEnabled === prev.soundEnabled) return
-      // Keep playing while muted so unmuting drops back in where the track is
-      for (const el of this.active) this.fade(el, this.level, 120)
+      if (s.soundEnabled === prev.soundEnabled && s.musicVolume === prev.musicVolume) return
+      // Keep playing while muted so unmuting drops back in where the track is.
+      // A volume drag follows the slider closely; a mute toggle eases.
+      const ms = s.soundEnabled === prev.soundEnabled ? 40 : 120
+      for (const el of this.active) {
+        if (!this.stopping.has(el)) this.fade(el, this.level, ms)
+      }
     })
   }
 
   private get level(): number {
-    return gameStore.getState().soundEnabled ? MUSIC_LEVEL : 0
+    const s = gameStore.getState()
+    return s.soundEnabled ? MUSIC_LEVEL * s.musicVolume : 0
   }
 
   get playing(): boolean {
@@ -121,6 +128,7 @@ class MusicSystem {
 
   private begin(a: HTMLAudioElement, key: MusicKey) {
     this.cancelFade(a)
+    this.stopping.delete(a)
     rewind(a)
     a.volume = 0
     // Autoplay can still be refused if no gesture has landed yet; that is not
@@ -137,6 +145,7 @@ class MusicSystem {
 
   private stopEl(a: HTMLAudioElement) {
     this.cancelFade(a)
+    this.stopping.delete(a)
     a.pause()
     rewind(a)
     this.active.delete(a)
@@ -149,6 +158,7 @@ class MusicSystem {
 
   private fade(a: HTMLAudioElement, to: number, ms: number, thenStop = false) {
     this.cancelFade(a)
+    if (thenStop) this.stopping.add(a)
     const from = a.volume
     const steps = Math.max(1, Math.round(ms / FADE_STEP_MS))
     let i = 0

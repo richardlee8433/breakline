@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
+import { SettingsPanel } from './SettingsPanel'
 
 export function TitleScreen() {
   const { hiScore, startRun } = useGameStore()
   const [blink, setBlink] = useState(true)
+  const [settings, setSettings] = useState(false)
 
   useEffect(() => {
     const id = setInterval(() => setBlink((b) => !b), 500)
     const onKey = (e: KeyboardEvent) => {
+      // While settings are open, keys belong to the panel (sliders use the
+      // arrows, buttons use Space/Enter); only Esc is ours, to close it.
+      if (settings) {
+        if (e.code === 'Escape') setSettings(false)
+        return
+      }
+      if (e.code === 'KeyO') { setSettings(true); return }
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun(true)
       // The A/B control build for playtests (game plan §14): same arena,
       // core switched off.
@@ -15,7 +24,7 @@ export function TitleScreen() {
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
-  }, [startRun])
+  }, [startRun, settings])
 
   const option = (core: boolean, text: string, hint: string, primary: boolean) => (
     <button
@@ -59,6 +68,16 @@ export function TitleScreen() {
       <div style={{ marginTop: 30, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {option(true, 'START', 'TAP · SPACE · 1', true)}
         {option(false, 'CONTROL RUN (NO CORE)', 'PLAYTEST A/B · PRESS 2', false)}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); setSettings(true) }}
+          style={{
+            display: 'block', width: 360, margin: '0 auto', padding: '9px 0',
+            fontFamily: 'monospace', letterSpacing: 3, cursor: 'pointer', fontSize: 14,
+            background: 'transparent', border: '1px solid #334455', color: '#8899aa',
+          }}
+        >
+          SETTINGS · SOUND [O]
+        </button>
       </div>
 
       <div style={{ marginTop: 36, fontSize: 13, color: '#778', lineHeight: 1.9, textAlign: 'center' }}>
@@ -69,6 +88,15 @@ export function TitleScreen() {
         <span style={{ color: '#ff6a33' }}>▲ ORANGE MISSILES: DODGE</span><br />
         PAUSE: P / ESC
       </div>
+
+      {settings && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,10,0.7)',
+        }}>
+          <SettingsPanel onClose={() => setSettings(false)} />
+        </div>
+      )}
     </div>
   )
 }
