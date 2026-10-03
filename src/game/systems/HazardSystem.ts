@@ -177,7 +177,7 @@ export class HazardSystem {
       if (Math.random() < seg.fill) {
         this.pending.push({ at: this.elapsed + ROCK.preview + rand(0, 0.15), mine: false, x: x + d / 2, size, preview: ROCK.preview })
       }
-      x += d + rand(8, 30) * K
+      x += d + rand(4, 18) * K
     }
     this.pending.sort((a, b) => a.at - b.at)
   }

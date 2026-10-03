@@ -114,46 +114,61 @@ const stage1: StageConfig = {
   ],
 }
 
-// Stage 2 — the asteroid shortcut, 180 s. Rocks ahead, pursuers behind.
-//   0–36    sparse rocks only: learn the markers
-//   36–90   pursuers join; the clear lane drifts slowly
-//   90–108  a quiet stretch…
+// Stage 2 — the asteroid shortcut, 180 s. Rocks ahead, pursuers behind
+// from the first seconds.
+//   0–36    a busy field of small and medium rocks: learn the markers
+//   36–90   denser, the clear lane drifts more
+//   90–108  a lighter stretch…
 //   108–126 …then big rocks
-//   126–162 mixed rhythm (rocks never close every lane)
+//   126–162 the densest part (rocks never close every lane)
 //   162–180 the field thins out toward the exit
+// Every `drift` stays below `gap` minus the ship's width, so consecutive
+// lanes always overlap by more than the ship: the way through never asks
+// for a sideways dash between rows.
 const stage2: StageConfig = {
   id: 2,
   bgTheme: 'asteroid',
   duration: 180,
   mission: '穿越小行星帶',
   rocks: [
-    { from: 1,   to: 36,  every: 1.9,  fill: 0.55, sizes: { small: 6, medium: 3, large: 0 }, gap: 210, drift: 60 },
-    { from: 36,  to: 90,  every: 1.55, fill: 0.7,  sizes: { small: 4, medium: 4, large: 1 }, gap: 190, drift: 80 },
-    { from: 90,  to: 108, every: 2.2,  fill: 0.4,  sizes: { small: 6, medium: 2, large: 0 }, gap: 220, drift: 50 },
-    { from: 108, to: 126, every: 1.7,  fill: 0.75, sizes: { small: 1, medium: 3, large: 4 }, gap: 190, drift: 70 },
-    { from: 126, to: 162, every: 1.45, fill: 0.75, sizes: { small: 3, medium: 4, large: 2 }, gap: 180, drift: 90 },
-    { from: 162, to: 175, every: 2.0,  fill: 0.45, sizes: { small: 5, medium: 2, large: 0 }, gap: 220, drift: 50 },
+    { from: 1,   to: 36,  every: 1.4,  fill: 0.8,  sizes: { small: 5, medium: 4, large: 1 }, gap: 200, drift: 60 },
+    { from: 36,  to: 90,  every: 1.2,  fill: 0.85, sizes: { small: 3, medium: 4, large: 2 }, gap: 185, drift: 70 },
+    { from: 90,  to: 108, every: 1.6,  fill: 0.65, sizes: { small: 5, medium: 3, large: 0 }, gap: 200, drift: 50 },
+    { from: 108, to: 126, every: 1.35, fill: 0.9,  sizes: { small: 1, medium: 3, large: 4 }, gap: 185, drift: 60 },
+    { from: 126, to: 162, every: 1.15, fill: 0.9,  sizes: { small: 3, medium: 4, large: 2 }, gap: 175, drift: 75 },
+    { from: 162, to: 176, every: 1.6,  fill: 0.6,  sizes: { small: 5, medium: 2, large: 0 }, gap: 200, drift: 50 },
   ],
   waves: [
-    w(36, 'drone', 2, 'spread'),
-    w(42, 'missileer', 1, 'center'),
+    w(3, 'drone', 1, 'center'),
+    w(8, 'drone', 2, 'spread'),
+    w(13, 'missileer', 1, 'center'),
+    w(19, 'drone', 2, 'left'),
+    w(24, 'missileer', 1, 'right'),
+    w(30, 'drone', 2, 'spread'),
+    w(35, 'missileer', 1, 'left'),
+    w(40, 'drone', 2, 'spread'),
+    w(44, 'missileer', 2, 'spread'),
     w(50, 'drone', 2, 'left'),
-    w(56, 'missileer', 1, 'right'),
-    w(64, 'drone', 2, 'spread'),
-    w(70, 'missileer', 2, 'spread'),
-    w(78, 'drone', 3, 'spread'),
-    w(84, 'missileer', 1, 'left'),
+    w(55, 'missileer', 1, 'right'),
+    w(60, 'drone', 3, 'spread'),
+    w(65, 'missileer', 2, 'spread'),
+    w(71, 'drone', 2, 'right'),
+    w(76, 'missileer', 1, 'center'),
+    w(82, 'drone', 3, 'spread'),
+    w(86, 'missileer', 2, 'spread'),
     w(92, 'drone', 2, 'center'),
-    w(100, 'drone', 2, 'spread'),
-    w(108, 'missileer', 1, 'center'),
-    w(114, 'drone', 2, 'right'),
-    w(120, 'missileer', 2, 'spread'),
-    w(127, 'drone', 3, 'spread'),
-    w(132, 'missileer', 2, 'spread'),
-    w(140, 'drone', 2, 'left'),
-    w(146, 'missileer', 1, 'right'),
-    w(152, 'drone', 3, 'spread'),
-    w(158, 'missileer', 2, 'spread'),
+    w(98, 'drone', 2, 'spread'),
+    w(104, 'missileer', 1, 'center'),
+    w(110, 'drone', 2, 'right'),
+    w(115, 'missileer', 2, 'spread'),
+    w(121, 'drone', 3, 'spread'),
+    w(126, 'missileer', 2, 'spread'),
+    w(132, 'drone', 2, 'left'),
+    w(137, 'missileer', 1, 'right'),
+    w(143, 'drone', 3, 'spread'),
+    w(148, 'missileer', 2, 'spread'),
+    w(154, 'drone', 2, 'spread'),
+    w(159, 'missileer', 2, 'spread'),
     w(165, 'drone', 2, 'spread'),
     w(170, 'missileer', 1, 'center'),
   ],
