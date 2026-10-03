@@ -57,8 +57,8 @@ const freshPlay = {
   paused: false,
 }
 
-const SOUND_KEY = 'raiden.soundEnabled'
-const HISCORE_KEY = 'raiden.hiScore'
+const SOUND_KEY = 'breakline.soundEnabled'
+const HISCORE_KEY = 'breakline.hiScore'
 
 function loadSoundPref(): boolean {
   try {

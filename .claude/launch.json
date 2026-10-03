@@ -2,13 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "raiden-shmup",
+      "name": "breakline",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "5174", "--strictPort"],
       "port": 5174
     },
     {
-      "name": "raiden-shmup-prod",
+      "name": "breakline-prod",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "dist", "--no-clipboard"],
       "port": 5175,

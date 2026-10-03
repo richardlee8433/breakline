@@ -30,10 +30,10 @@ export function TitleScreen() {
       </div>
       <div style={{ fontSize: 42, fontWeight: 'bold', letterSpacing: 4, color: '#00ccff',
         textShadow: '0 0 20px #00ccff, 0 0 40px #0066ff' }}>
-        RAIDEN
+        BREAKLINE
       </div>
       <div style={{ fontSize: 13, color: '#aaaacc', marginTop: 6, letterSpacing: 2 }}>
-        PIXEL ASSAULT
+        COMBAT PROTOTYPE
       </div>
       <div style={{ marginTop: 40, fontSize: 11, color: '#888' }}>
         HI-SCORE  {String(hiScore).padStart(6, '0')}
