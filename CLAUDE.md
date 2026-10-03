@@ -119,10 +119,11 @@ gameover → RETRY STAGE → playing（同一關，不重播對話）
   - 進入 story 時呼叫 `enterStory()`，負責清場並換上下一關的背景。
 - **對話 UI**：`ui/StoryDialog.tsx`，移植自 Lastlight 的 `Dialog.tsx` 和 `.dlg` CSS，尺寸乘上 `--k`（= SPRITE_SCALE）。
 - **立繪**：`portraitURL(id)`（`src/art/portraits.ts`），規則同 Lastlight 的 portraitArt。
-  - 有手繪圖的角色，用 `public/assets/portraits/<id>.webp`，從第一版四人合圖切出的胸像，透明背景、底部淡出。這是暫用素材，`docs/characters.md` 規劃之後改用獨立立繪。
+  - 有手繪圖的角色，用 `public/assets/portraits/<id>.webp`，從四人合圖切出的胸像，透明背景、底部淡出。這就是正式立繪。
   - 沒有手繪圖的角色，退回移植自 Lastlight 的像素立繪引擎（`.dlg-art.pixel`）。
   - 新增手繪角色時，把 id 加進 `HAND_DRAWN`。
-  - 正式角色：凱・默瑟（kai）、蘿莎・維加（rosa）、米拉・森博士（mira）、沃斯指揮官（voss）。
+  - 正式角色：凱・默瑟（kai）、蘿莎・維加（rosa）、米拉・森博士（mira）、艾德里安・索恩指揮官（thorne）。
+  - 寫台詞照 `docs/characters.md` 的分工：凱問「現在怎麼辦」並拍板、蘿莎答「怎麼做到」、米拉找「這代表什麼」、索恩施壓「還有多少時間」。
 - **試玩數據**：故事模式三關累計。從標題開始新的一局時才重置。
 
 ## 試玩支援（規劃書第十四節）

@@ -76,9 +76,9 @@ npm run dev
 - **凱・默瑟**：地方貨運飛行員，主角。
 - **蘿莎・維加**：工程師，把核心接上戰機的人。
 - **米拉・森博士**：撤離船上的研究員。
-- **沃斯指揮官**：Helion 地方封鎖艦隊指揮官。
+- **艾德里安・索恩指揮官**：Helion 地方封鎖艦隊指揮官。
 
-對話框的手繪胸像是從第一版四人合圖切出來的暫用素材（`public/assets/portraits/*.webp`）。之後有獨立立繪時再替換。沒有手繪圖的角色，會退回 Lastlight 的像素立繪產生器（`src/art/portraits.ts`）。台詞在 `src/game/data/story.ts`，地名和台詞仍是草稿。
+對話框的手繪胸像是正式立繪（`public/assets/portraits/*.webp`），台詞依 `docs/characters.md` 的四人分工與台詞風格撰寫。沒有手繪圖的角色，會退回 Lastlight 的像素立繪產生器（`src/art/portraits.ts`）。台詞在 `src/game/data/story.ts`，地名與劇情細節仍是暫定。
 
 ## 試玩測試（規劃書第十四節）
 

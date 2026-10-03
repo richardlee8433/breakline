@@ -197,10 +197,10 @@ export const PORTRAITS = {
     eyes(p, 0x3a2a1a); brows(p, hair[1], 'up'); nose(p, skin); mouth(p, 'open', skin)
     p.rect(34, 35, 9, 4, 0x2a2a48); p.rect(35, 36, 7, 2, G); p.set(36, 36, 0xf0e8ff)  // visor over the eye
   },
-  /** Commander Voss: Helion's local blockade-fleet chief. Standard-issue
+  /** Commander Adrian Thorne: Helion's local blockade-fleet chief. Standard-issue
    *  white-grey uniform with industrial-yellow trim, peaked cap, grey
    *  temples, a hard stare. */
-  voss(p: Pix) {
+  thorne(p: Pix) {
     const skin = SKIN.e, hair = ramp(0x5a5458)
     body(p, 0xc8ccd4, { broad: 2 })
     const U = ramp(0xc8ccd4)
@@ -228,7 +228,7 @@ export type PortraitId = keyof typeof PORTRAITS
 
 const PORTRAIT_BG: Record<PortraitId, [number, number]> = {
   kai: [0x3a2a2a, 0x1a1418], rosa: [0x1e3a3a, 0x0e1a1c],
-  mira: [0x2e2450, 0x120e24], voss: [0x383c48, 0x14161e],
+  mira: [0x2e2450, 0x120e24], thorne: [0x383c48, 0x14161e],
 }
 
 /** Render one portrait to a 64×80 canvas. bg=false leaves the background clear. */
@@ -251,7 +251,7 @@ export function renderPortrait(id: PortraitId, bg = true): HTMLCanvasElement {
 }
 
 /** Characters with hand-drawn busts in public/assets/portraits/. */
-const HAND_DRAWN: ReadonlySet<PortraitId> = new Set<PortraitId>(['kai', 'rosa', 'mira', 'voss'])
+const HAND_DRAWN: ReadonlySet<PortraitId> = new Set<PortraitId>(['kai', 'rosa', 'mira', 'thorne'])
 
 const cache = new Map<string, string>()
 /** Portrait image for a character, and whether it is the pixel stand-in. */
