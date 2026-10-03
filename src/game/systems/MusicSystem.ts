@@ -28,6 +28,7 @@ class MusicSystem {
       // A volume drag follows the slider closely; a mute toggle eases.
       const ms = s.soundEnabled === prev.soundEnabled ? 40 : 120
       for (const el of this.active) {
+        el.muted = this.silent
         if (!this.stopping.has(el)) this.fade(el, this.level, ms)
       }
     })
@@ -36,6 +37,15 @@ class MusicSystem {
   private get level(): number {
     const s = gameStore.getState()
     return s.soundEnabled ? MUSIC_LEVEL * s.musicVolume : 0
+  }
+
+  /**
+   * Off means `muted`, not just volume 0: iOS/iPadOS ignore scripted
+   * HTMLMediaElement.volume and always play at full level, so a volume-only
+   * mute let the music through there.
+   */
+  private get silent(): boolean {
+    return this.level === 0
   }
 
   get playing(): boolean {
@@ -131,6 +141,7 @@ class MusicSystem {
     this.stopping.delete(a)
     rewind(a)
     a.volume = 0
+    a.muted = this.silent
     // Autoplay can still be refused if no gesture has landed yet; that is not
     // an error worth surfacing, the next transport call will try again.
     a.play().catch(() => {})

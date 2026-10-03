@@ -35,8 +35,10 @@ class AudioSystem {
   }
 
   private fire(def: typeof SFX[keyof typeof SFX], rate = 1, gain = 1) {
-    if (!this.getCtx()) return
-    sampleBank.play(def, rate, gain * gameStore.getState().sfxVolume)
+    // At zero volume, play nothing at all rather than a silent voice.
+    const volume = gameStore.getState().sfxVolume
+    if (volume <= 0 || !this.getCtx()) return
+    sampleBank.play(def, rate, gain * volume)
   }
 
   /** Settings screen: a short, recognisable cue to judge the SFX level by. */
