@@ -26,6 +26,8 @@ export class CoreSystem {
 
   /** Bumped on every catch so the HUD can replay its "energy jump" pulse. */
   catchSerial = 0
+  /** Per-run counts for the playtest report. */
+  tally = { windows: 0, whiffs: 0, catches: 0, counters: 0, overheats: 0 }
 
   get absorbing() { return this.window > 0 }
   get absorbReady() {
@@ -44,6 +46,7 @@ export class CoreSystem {
     this.energy = 0; this.heat = 0; this.overheated = false
     this.window = 0; this.cooldown = 0; this.counterCd = 0; this.coolDelay = 0
     this.catchesThisWindow = 0
+    this.tally = { windows: 0, whiffs: 0, catches: 0, counters: 0, overheats: 0 }
   }
 
   /** Try to open the window. Returns false if absorb is unavailable. */
@@ -51,6 +54,7 @@ export class CoreSystem {
     if (!this.absorbReady) return false
     this.window = ABSORB.window
     this.catchesThisWindow = 0
+    this.tally.windows++
     this.addHeat(HEAT.perActivation)
     if (this.overheated) return false   // the activation itself tipped it over
     audioSystem.playAbsorbOpen()
@@ -68,6 +72,7 @@ export class CoreSystem {
     this.energy = Math.min(ENERGY.max, this.energy + ENERGY.perCatch)
     this.catchesThisWindow++
     this.catchSerial++
+    this.tally.catches++
     audioSystem.playAbsorbCatch(this.catchesThisWindow)
     if (before < COUNTER.cost && this.energy >= COUNTER.cost) audioSystem.playCounterReady()
     this.addHeat(HEAT.perCatch)
@@ -78,6 +83,7 @@ export class CoreSystem {
     if (!this.counterReady) return false
     this.energy -= COUNTER.cost
     this.counterCd = COUNTER.cooldown
+    this.tally.counters++
     return true
   }
 
@@ -97,6 +103,7 @@ export class CoreSystem {
   }
 
   private closeWindow() {
+    if (this.catchesThisWindow === 0) this.tally.whiffs++
     this.window = 0
     this.cooldown = ABSORB.cooldown
   }
@@ -106,6 +113,7 @@ export class CoreSystem {
     this.coolDelay = HEAT.coolDelay
     if (this.heat >= HEAT.max && !this.overheated) {
       this.overheated = true
+      this.tally.overheats++
       this.cancelAbsorb()
       audioSystem.playOverheat()
     }

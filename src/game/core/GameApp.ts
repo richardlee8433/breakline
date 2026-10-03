@@ -26,7 +26,7 @@ import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
 import { FloatingTextPool } from '../fx/FloatingText'
 import { STAGES } from '../data/stages'
-import { gameStore } from '../../store/gameStore'
+import { gameStore, HitCause, Hint } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 
 import {
@@ -66,6 +66,17 @@ export class GameApp {
   private held = { absorb: true, dash: true, counter: true }
   private coreSyncAcc = 0
   private lastCoreKey = ''
+
+  // Playtest metrics not already tallied by CoreSystem / PulseCannon.
+  private run = {
+    seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0,
+    deaths: { energy: 0, missile: 0, hull: 0, beam: 0 } as Record<HitCause, number>,
+    deathsWhileAbsorbing: 0,
+  }
+  // First-time teaching prompts. Non-blocking banners, once per run each.
+  private hintSeen = { counter: false, missile: false, overheat: false }
+  private hintTimer = 0
+  private hintSerial = 0
 
   private bgLayer!: Container
   private gameLayer!: Container
@@ -241,6 +252,15 @@ export class GameApp {
     this.pulse.releaseAll()
     this.held.absorb = this.held.dash = this.held.counter = true
     this.syncCore(true)
+    this.pulse.kills = 0
+    this.run = {
+      seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0,
+      deaths: { energy: 0, missile: 0, hull: 0, beam: 0 }, deathsWhileAbsorbing: 0,
+    }
+    this.hintSeen = { counter: false, missile: false, overheat: false }
+    gameStore.getState().setReport(null)
+    if (this.core.enabled) this.showHint('CYAN RINGS ARE ENERGY  ·  PRESS SHIFT TO ABSORB THEM', 'info', 6)
+    else this.showHint('CONTROL RUN  ·  CORE OFFLINE  ·  SHOOT, DODGE, SPACE TO DASH', 'info', 5)
     gameStore.getState().resetChain()
     this.chainTimer = 0
     this.lastChain = 0
@@ -284,13 +304,14 @@ export class GameApp {
     this.held.absorb = a.absorb; this.held.dash = a.dash; this.held.counter = a.counter
 
     // A dash cancels an open absorb window; absorb can't open mid-dash.
-    if (dashPressed && this.player.tryDash(a)) this.core.cancelAbsorb()
+    if (dashPressed && this.player.tryDash(a)) { this.core.cancelAbsorb(); this.run.dashes++ }
     if (absorbPressed && !this.player.isDead && !this.player.isDashing) this.core.startAbsorb()
 
     this.player.update(dt, a, this.core.absorbing)
     if (this.player.consumeJustDied()) this.onPlayerDeath()
     this.core.update(dt)
     if (counterPressed && !this.player.isDead && this.core.spendCounter()) this.fireCounter()
+    this.trackRun(dt)
 
     // Kill-chain lapse: each kill rearms the window; silence breaks the chain
     const chain = gameStore.getState().chain
@@ -349,7 +370,7 @@ export class GameApp {
     // Enemy laser hits on player (registers a hit; death resolves below)
     for (const beam of activeLasers) {
       if (this.player.y > beam.fromY && Math.abs(this.player.x - beam.x) < 10) {
-        this.player.hit()
+        this.player.hit('beam')
         break
       }
     }
@@ -396,7 +417,10 @@ export class GameApp {
     this.syncCore(false, dt)
 
     // Boss-less stages (the Phase 1 arena) end once the field is clear.
-    if (this.waves.finished && !this.player.isDead) gameStore.getState().setPhase('complete')
+    if (this.waves.finished && !this.player.isDead) {
+      this.finishRun(true)
+      gameStore.getState().setPhase('complete')
+    }
   }
 
   private fireCounter() {
@@ -435,7 +459,60 @@ export class GameApp {
     gameStore.getState().setCore(view)
   }
 
+  private trackRun(dt: number) {
+    const r = this.run, c = this.core
+    r.seconds += dt
+    if (c.overheated) r.overheatSeconds += dt
+    if (c.counterReady && !this.player.isDead) r.readyIdleSeconds += dt
+
+    if (this.hintTimer > 0) {
+      this.hintTimer -= dt
+      if (this.hintTimer <= 0) gameStore.getState().setHint(null)
+    }
+    if (c.enabled && !this.hintSeen.counter && c.energy >= COUNTER.cost) {
+      this.hintSeen.counter = true
+      this.showHint('CORE CHARGED  ·  PRESS E TO COUNTER', 'info', 4)
+    }
+    if (!this.hintSeen.missile && this.missiles.all.some((m) => m.active)) {
+      this.hintSeen.missile = true
+      this.showHint(c.enabled
+        ? 'MISSILES CAN\'T BE ABSORBED  ·  SHOOT OR DODGE'
+        : 'MISSILES  ·  SHOOT, DODGE OR DASH', 'warn', 5)
+    }
+    if (!this.hintSeen.overheat && c.overheated) {
+      this.hintSeen.overheat = true
+      this.showHint('OVERHEAT  ·  ABSORB LOCKED  ·  GUN AND DASH STILL WORK', 'warn', 4)
+    }
+  }
+
+  private showHint(text: string, tone: Hint['tone'], seconds: number) {
+    this.hintTimer = seconds
+    gameStore.getState().setHint({ id: ++this.hintSerial, text, tone })
+  }
+
+  private finishRun(cleared: boolean) {
+    const s = gameStore.getState()
+    const r = this.run
+    const round1 = (n: number) => Math.round(n * 10) / 10
+    s.setHint(null)
+    s.setReport({
+      mode: this.core.enabled ? 'core' : 'control',
+      cleared,
+      seconds: round1(r.seconds),
+      score: s.score,
+      ...this.core.tally,
+      counterKills: this.pulse.kills,
+      overheatSeconds: round1(r.overheatSeconds),
+      readyIdleSeconds: round1(r.readyIdleSeconds),
+      dashes: r.dashes,
+      deaths: { ...r.deaths },
+      deathsWhileAbsorbing: r.deathsWhileAbsorbing,
+    })
+  }
+
   private onPlayerDeath() {
+    this.run.deaths[this.player.lastHitCause]++
+    if (this.core.absorbing) this.run.deathsWhileAbsorbing++
     this.core.cancelAbsorb()
     this.explosions.spawn(this.player.x, this.player.y, 2.5)
     screenShake.trigger(8)
@@ -444,7 +521,10 @@ export class GameApp {
     const s = gameStore.getState()
     s.resetChain()   // death breaks the kill chain
     s.loseLife()
-    if (s.lives <= 1) s.setPhase('gameover')
+    if (s.lives <= 1) {
+      this.finishRun(false)
+      s.setPhase('gameover')
+    }
   }
 
   /** CSS scale of the canvas so touch deltas map to game pixels */

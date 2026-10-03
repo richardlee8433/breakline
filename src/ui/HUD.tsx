@@ -129,6 +129,7 @@ export function HUD() {
       )}
 
       {IS_TOUCH && <TouchButtons />}
+      <HintBanner />
 
       {/* Boss warning banner — centered on the corridor, not the whole stage */}
       {bossWarning && (
@@ -217,5 +218,35 @@ function TouchButtons() {
       {button('Space', 'DASH', coreEnabled ? 104 : 18, 58, '#b9a6ff')}
       {coreEnabled && button('KeyE', 'COUNTER', 172, 58, '#ffffff')}
     </>
+  )
+}
+
+/** First-time teaching prompts: non-blocking, centered on the corridor. */
+function HintBanner() {
+  const hint = useGameStore((s) => s.hint)
+  const phase = useGameStore((s) => s.phase)
+  if (!hint || phase !== 'playing') return null
+  const color = hint.tone === 'warn' ? '#ff8a4d' : '#7ff3ff'
+  return (
+    <div key={hint.id} style={{
+      position: 'absolute', top: '16%', left: PLAYFIELD_LEFT, width: PLAYFIELD_W,
+      display: 'flex', justifyContent: 'center', pointerEvents: 'none', userSelect: 'none',
+    }}>
+      <style>{`
+        @keyframes hintIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <div style={{
+        fontFamily: 'monospace', fontSize: 15, letterSpacing: 2, color,
+        padding: '8px 16px', background: 'rgba(0,8,20,0.72)',
+        border: `1px solid ${color}`, borderRadius: 4,
+        textShadow: `0 0 8px ${color}`, textAlign: 'center',
+        maxWidth: '92%', animation: 'hintIn 0.25s ease-out',
+      }}>
+        {hint.text}
+      </div>
+    </div>
   )
 }

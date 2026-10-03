@@ -19,6 +19,8 @@ interface Pulse { sprite: Sprite; active: boolean; hit: Set<object> }
  */
 export class PulseCannon {
   private pool: Pulse[] = []
+  /** Enemies killed by pulses this run, for the playtest report. */
+  kills = 0
 
   constructor(container: Container, texture: Texture) {
     for (let i = 0; i < POOL; i++) {
@@ -60,7 +62,7 @@ export class PulseCannon {
         if (ex > right || ex + h.width < left || ey > bottom || ey + h.height < top) continue
         p.hit.add(e)
         fx.explosions.spawn(e.sprite.x, e.sprite.y, 1.2)
-        damageEnemy(e, COUNTER.damage, fx)
+        if (damageEnemy(e, COUNTER.damage, fx)) this.kills++
       }
 
       if (boss?.active && !p.hit.has(boss)) {

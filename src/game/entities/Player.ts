@@ -5,6 +5,7 @@ import { audioSystem } from '../systems/AudioSystem'
 import { PLAYFIELD_LEFT, PLAYFIELD_RIGHT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
 import { PLAYER } from '../data/player'
 import { DASH } from '../data/core'
+import type { HitCause } from '../../store/gameStore'
 
 const SPEED = PLAYER.speed * SPRITE_SCALE
 const PLAYFIELD_CENTER = PLAYFIELD_LEFT + PLAYFIELD_W / 2
@@ -24,6 +25,8 @@ export class Player {
   private state: 'alive' | 'dead' | 'respawning' = 'alive'
   private respawnTimer = 0
   private justDied = false
+  /** What caused the most recent death, for the playtest report. */
+  lastHitCause: HitCause = 'energy'
   private tilt = 0
   private dashTime = 0
   private dashCd = 0
@@ -74,8 +77,9 @@ export class Player {
     return true
   }
 
-  hit() {
+  hit(cause: HitCause) {
     if (this.state !== 'alive' || this.invincible > 0) return false
+    this.lastHitCause = cause
     this.state = 'dead'; this.justDied = true; this.respawnTimer = PLAYER.respawnDelay
     this.sprite.visible = false; this.dashTime = 0
     return true

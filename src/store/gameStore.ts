@@ -22,6 +22,33 @@ const freshCore: CoreView = {
   absorbCharge: 1, dashCharge: 1, catchSerial: 0,
 }
 
+export type HitCause = 'energy' | 'missile' | 'hull' | 'beam'
+
+/**
+ * One run's playtest metrics (game plan §14): enough to spot side-hits
+ * while absorbing, whiffed windows, dead time while overheated, and energy
+ * left sitting unspent.
+ */
+export interface RunReport {
+  mode: 'core' | 'control'
+  cleared: boolean
+  seconds: number
+  score: number
+  windows: number        // absorb windows opened
+  whiffs: number         // windows that caught nothing
+  catches: number        // rounds absorbed
+  counters: number       // counter shots fired
+  counterKills: number   // enemies killed by counter pulses
+  overheats: number
+  overheatSeconds: number
+  readyIdleSeconds: number  // time spent with a counter affordable but unused
+  dashes: number
+  deaths: Record<HitCause, number>
+  deathsWhileAbsorbing: number
+}
+
+export interface Hint { id: number; text: string; tone: 'info' | 'warn' }
+
 interface GameState {
   score: number
   hiScore: number
@@ -40,6 +67,8 @@ interface GameState {
   /** false = A/B control build: same arena, core switched off. */
   coreEnabled: boolean
   core: CoreView
+  hint: Hint | null
+  report: RunReport | null
 
   addScore: (n: number) => void
   addKillScore: (base: number) => { awarded: number; mult: number }
@@ -49,6 +78,8 @@ interface GameState {
   addLife: () => void
   setPhase: (p: GameState['phase']) => void
   setCore: (c: CoreView) => void
+  setHint: (h: Hint | null) => void
+  setReport: (r: RunReport | null) => void
   startRun: (coreEnabled: boolean) => void
   setBossHp: (hp: number, max: number) => void
   setBossActive: (v: boolean) => void
@@ -65,6 +96,8 @@ const freshPlay = {
   bossHp: 0, bossMaxHp: 1, bossActive: false, bossWarning: false,
   paused: false,
   core: freshCore,
+  hint: null as Hint | null,
+  report: null as RunReport | null,
 }
 
 const SOUND_KEY = 'breakline.soundEnabled'
@@ -144,6 +177,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     return { phase, paused: false }
   }),
   setCore: (core) => set({ core }),
+  setHint: (hint) => set({ hint }),
+  setReport: (report) => set({ report }),
   startRun: (coreEnabled) => set((s) => ({
     ...freshPlay,
     hiScore: s.hiScore,

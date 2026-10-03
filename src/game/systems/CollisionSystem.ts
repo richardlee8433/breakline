@@ -134,7 +134,7 @@ export class CollisionSystem {
       if (!enemy.active) continue
       const h = enemy.hitbox
       if (overlaps(px, py, ph.width, ph.height, enemy.sprite.x + h.x, enemy.sprite.y + h.y, h.width, h.height)) {
-        player.hit()
+        player.hit('hull')
         return
       }
     }
@@ -149,7 +149,7 @@ export class CollisionSystem {
         if (!bullet.active) continue
         const bx = bullet.sprite.x - BULLET_R, by = bullet.sprite.y - BULLET_R
         if (overlaps(bx, by, BULLET_R * 2, BULLET_R * 2, px, py, ph.width, ph.height)) {
-          if (!player.hit()) continue
+          if (!player.hit(pool === missiles ? 'missile' : 'energy')) continue
           pool.release(bullet)
           return
         }
