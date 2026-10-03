@@ -4,6 +4,7 @@ import { HUD } from './ui/HUD'
 import { TitleScreen } from './ui/TitleScreen'
 import { ResultScreen } from './ui/ResultScreen'
 import { StoryDialog } from './ui/StoryDialog'
+import { PauseMenu } from './ui/PauseMenu'
 import { useGameStore } from './store/gameStore'
 
 import { STAGE_W as GAME_W, STAGE_H as GAME_H } from './game/config'
@@ -95,29 +96,7 @@ export default function App() {
       {phase === 'title'      && <TitleScreen />}
       {(phase === 'gameover' || phase === 'complete' || phase === 'stageclear') && <ResultScreen kind={phase} />}
       {(phase === 'story' || talk) && <StoryDialog />}
-      {paused && phase === 'playing' && (
-        <div
-          onClick={togglePause}
-          style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,10,0.72)',
-            color: '#fff', fontFamily: 'monospace',
-            userSelect: 'none', cursor: 'pointer', zIndex: 20,
-          }}
-        >
-          <div style={{
-            fontSize: 40, letterSpacing: 10, fontWeight: 'bold',
-            textShadow: '0 0 16px #44ddff',
-          }}>
-            PAUSED
-          </div>
-          <div style={{ marginTop: 16, fontSize: 12, color: '#88aacc', letterSpacing: 3 }}>
-            PRESS P / ESC OR TAP TO RESUME
-          </div>
-        </div>
-      )}
+      {paused && phase === 'playing' && <PauseMenu />}
     </div>
   )
 }

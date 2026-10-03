@@ -8,6 +8,10 @@ export interface Bullet {
   active: boolean
   grazed: boolean  // already awarded a graze; reset on acquire
   damage: number
+  /** Guided missiles: max turn rate (rad/s), 0 = flies straight. */
+  turn: number
+  /** Guided missiles: seconds left before it burns out. */
+  life: number
 }
 
 export class BulletPool {
@@ -23,7 +27,7 @@ export class BulletPool {
       sprite.anchor.set(0.5)
       sprite.visible = false
       container.addChild(sprite)
-      this.all.push({ sprite, vx: 0, vy: 0, active: false, grazed: false, damage: 1 })
+      this.all.push({ sprite, vx: 0, vy: 0, active: false, grazed: false, damage: 1, turn: 0, life: 0 })
     }
   }
 
@@ -35,6 +39,8 @@ export class BulletPool {
     if (!b) return null
     b.active = true
     b.grazed = false
+    b.turn = 0
+    b.life = 0
     b.vx = vx
     b.vy = vy
     b.damage = damage

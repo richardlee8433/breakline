@@ -76,3 +76,49 @@ export const LOCK = {
 
 /** Background scroll speed: higher than the old shooter's, to sell speed. */
 export const SCROLL_SPEED = 150
+
+/** Guided missiles (stage 3): limited turn rate and a finite life, so they
+ *  can always be shaken by moving across their path. */
+export const GUIDED = {
+  turnRate: 1.7,   // rad/s
+  life: 3.4,       // seconds, then the missile burns out
+}
+
+/** Asteroids (stage 2). Sizes are drawn diameters in base px; the hit
+ *  radius is a smaller share of that (forgiving edges). */
+export const ROCK = {
+  sizes: {
+    small:  { dia: 46,  src: './assets/hazards/rock-small.png' },
+    medium: { dia: 80,  src: './assets/hazards/rock-medium.png' },
+    large:  { dia: 124, src: './assets/hazards/rock-large.png' },
+  },
+  hitFrac: 0.36,
+  /** Down-screen speed: the ship is flying into them. */
+  speed: 165,
+  /** A marker on the top edge shows where each rock comes in, this long
+   *  before it does. */
+  preview: 1.0,
+  maxSpin: 0.6,
+}
+export type RockSize = keyof typeof ROCK.sizes
+
+/** Proximity mines (stage 3): pre-laid, they scroll in from ahead. */
+export const MINE = {
+  dia: 56,
+  src: './assets/hazards/mine.png',
+  speed: 150,
+  preview: 0.8,
+  /** Entering this radius (or touching the body) starts the fuse. */
+  triggerRadius: 70,
+  /** The blast hits once, at detonation, within this radius. Escaping
+   *  from the trigger edge needs (blast − trigger) = 30 px in a second,
+   *  a tenth of the ship's speed. */
+  blastRadius: 100,
+  fuse: 1.0,
+  blastFx: 0.25,
+}
+
+/** Stage 3's ending: the synchronized jump sequence after the clock. */
+export const JUMP = {
+  sequence: 2.6,
+}

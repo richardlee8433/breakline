@@ -10,7 +10,7 @@ export const MUSIC_DIR = './assets/audio/music/'
 
 export type SfxKey =
   | 'player-hit' | 'explosion-small' | 'explosion-large'
-  | 'missile-launch' | 'missile-lock'
+  | 'missile-launch' | 'missile-lock' | 'mine-arm'
   | 'absorb-catch' | 'emp-ready' | 'emp-fire' | 'emp-blast'
 
 export interface SfxDef {
@@ -36,6 +36,7 @@ export const SFX: Record<SfxKey, SfxDef> = {
   // Solid threats sound heavy and urgent; nothing about them is a chime.
   'missile-launch':  { src: 'bigshot1.ogg',     gain: 0.40, throttleMs: 120, detune: 40 },
   'missile-lock':    { src: 'alarm2.ogg',       gain: 0.30, throttleMs: 250 },
+  'mine-arm':        { src: 'alarm1.ogg',       gain: 0.38, throttleMs: 150 },
 
   // ── core ───────────────────────────────────────────────────────────────
   // Energy is good news: a light chime per absorbed round (pitch climbs on

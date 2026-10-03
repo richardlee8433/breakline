@@ -32,26 +32,37 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 /** Hull, the stage clock and objective, the EMP gauge (design v0.2 §5). */
 export function HUD() {
-  const { hull, timeLeft, duration, stage, soundEnabled, toggleSound } = useGameStore()
-  const mission = stageConfig(stage).mission
+  const { hull, timeLeft, duration, stage, soundEnabled, toggleSound, togglePause } = useGameStore()
+  const cfg = stageConfig(stage)
   const urgent = timeLeft <= 10
   const progress = Math.min(1, Math.max(0, 1 - timeLeft / duration))
 
-  const soundButton = (
+  // Stage 3: the clock is the jump drive charging (design v0.2 §5: one
+  // number, elapsed / duration, so the two readouts never disagree).
+  const mission = cfg.jump ? `${cfg.mission} · 跳躍充能 ${Math.floor(progress * 100)}%` : cfg.mission
+
+  const iconButton = (label: string, title: string, onClick: () => void) => (
     <button
       // Blur after click so a focused button isn't re-triggered by Space,
-      // which is a game key.
-      onClick={(e) => { toggleSound(); e.currentTarget.blur() }}
+      // which is a game key. Pointer-down must not reach the drag input.
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { onClick(); e.currentTarget.blur() }}
       onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault() }}
-      title="Toggle sound (M)"
+      title={title}
       style={{
-        pointerEvents: 'all', background: 'rgba(0,0,0,0.5)', border: '1px solid #444', borderRadius: 4,
-        color: '#fff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, lineHeight: 1,
-        padding: '2px 6px', userSelect: 'none',
+        pointerEvents: 'all', background: 'rgba(0,0,0,0.5)', border: '1px solid #556', borderRadius: 4,
+        color: '#fff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, lineHeight: 1,
+        padding: '4px 8px', userSelect: 'none', minWidth: 32,
       }}
     >
-      {soundEnabled ? '🔊' : '🔇'}
+      {label}
     </button>
+  )
+  const buttons = (
+    <span style={{ display: 'flex', gap: 6, pointerEvents: 'all' }}>
+      {iconButton('❚❚', 'Pause (P / Esc)', togglePause)}
+      {iconButton(soundEnabled ? '🔊' : '🔇', 'Toggle sound (M)', toggleSound)}
+    </span>
   )
 
   const hullPips = (
@@ -99,7 +110,7 @@ export function HUD() {
             display: 'flex', flexDirection: 'column', gap: 9, alignItems: 'flex-end', ...mono,
           }}>
             {hullPips}
-            <span style={{ pointerEvents: 'all' }}>{soundButton}</span>
+            {buttons}
             <div style={{ marginTop: 6, width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
               <EmpPanel width={Math.min(300, WING_W - 28)} />
             </div>
@@ -115,7 +126,7 @@ export function HUD() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             {hullPips}
             {timer(22)}
-            {soundButton}
+            {buttons}
           </div>
           {progressBar}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>

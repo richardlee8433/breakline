@@ -27,7 +27,7 @@ export interface Scene {
   lines: [Speaker, string][]
 }
 
-export type SceneId = 'stage1' | 'stage2' | 'stage3' | 'ending'
+export type SceneId = 'stage1' | 'stage2' | 'stage3' | 'ending' | 'tut-mine'
 
 // Scripts from docs/Breakline_Chase_Prototype_Design_v0.2.txt (§6–9): three
 // stages of escape with an end point, no boss to destroy. The rules of the
@@ -87,6 +87,19 @@ export const SCENES: Record<SceneId, Scene> = {
       ['rosa', '新型機抗干擾，EMP 只能讓它們停一下。抓準時機，別以為放完就安全了。'],
       ['mira', '我把非必要掃描關掉，電力轉給跳躍與護盾。資料可以再找，人沒辦法。'],
       ['kai', '好。博士負責倒數，蘿莎看著核心。我負責別撞上去。'],
+    ],
+  },
+  // In-combat talk (combat pauses under it): the first mine on screen.
+  // The one rule worth stopping the chase for — the fuse can't be undone.
+  'tut-mine': {
+    heading: '',
+    lines: [
+      ['rosa', '凱，前面那顆就是感應水雷。看到它外面那圈淡紅色了嗎？那是感應範圍。'],
+      ['rosa', '一進圈就開始倒數，一秒後爆炸。就算你馬上出去，倒數也不會停。'],
+      ['kai', '撞到本體呢？'],
+      ['rosa', '一樣是一秒引信，不會當場炸。但爆炸範圍比感應圈大，看到紅圈閃就往外飛，別回頭。'],
+      ['rosa', 'EMP 對它沒用。只能閃。'],
+      ['kai', '收到。看到紅圈就跑。'],
     ],
   },
   // §9 Ending — the synchronized jump, and what the core points at next.

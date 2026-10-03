@@ -1,6 +1,6 @@
 import { Container, Sprite, Texture, Graphics } from 'pixi.js'
 import { EnemyDef } from '../data/enemies'
-import { CHASE, LOCK } from '../data/chase'
+import { CHASE, LOCK, GUIDED } from '../data/chase'
 import { BulletPool } from './BulletPool'
 import { fireAimedFan } from '../systems/BulletPatterns'
 import { STAGE_H, PLAYFIELD_LEFT, PLAYFIELD_RIGHT, SPRITE_SCALE } from '../config'
@@ -100,6 +100,14 @@ export class Enemy {
     this.engineG.visible = this.fxG.visible = false
   }
 
+  /** Sideways nudge from a neighbour: moves the ship and its station, so
+   *  the two don't drift straight back onto each other. */
+  nudge(dx: number) {
+    const hw = this.sprite.width / 2
+    this.sprite.x = Math.max(PLAYFIELD_LEFT + hw, Math.min(PLAYFIELD_RIGHT - hw, this.sprite.x + dx))
+    this.lane = Math.max(-SPREAD * 1.6, Math.min(SPREAD * 1.6, this.lane + dx))
+  }
+
   /** EMP hit: go dark for `seconds`. Cancels a running missile lock. */
   disable(seconds: number) {
     if (!this.empable) return
@@ -181,7 +189,7 @@ export class Enemy {
     this.fireT -= dt
     if (this.fireT > 0) return
     this.fireT = this.def.fireRate * rand(0.85, 1.15)
-    if (this.def.attack === 'missile') {
+    if (this.def.attack !== 'fan') {
       // Lock first: a marker on the ship and a cue, then the launch.
       this.lockT = LOCK.time
       audioSystem.playMissileLock()
@@ -195,7 +203,11 @@ export class Enemy {
     const x = this.sprite.x, y = this.sprite.y - this.sprite.height * 0.45
     const dx = px - x, dy = py - y
     const len = Math.sqrt(dx * dx + dy * dy) || 1
-    pool.acquire(x, y, (dx / len) * this.def.bulletSpeed, (dy / len) * this.def.bulletSpeed)
+    const guided = this.def.attack === 'guided'
+    // Guided missiles are tinted pink so they read apart from straight ones.
+    const b = pool.acquire(x, y, (dx / len) * this.def.bulletSpeed, (dy / len) * this.def.bulletSpeed,
+      1, guided ? 0xff9ad8 : 0xffffff)
+    if (b && guided) { b.turn = GUIDED.turnRate; b.life = GUIDED.life }
     audioSystem.playMissileLaunch()
   }
 

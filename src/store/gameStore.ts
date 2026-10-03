@@ -13,8 +13,8 @@ export interface CoreView {
 
 const freshCore: CoreView = { energy: 0, ready: false, empCharge: 1, catchSerial: 0 }
 
-/** What cost the ship a point of hull. Stages 2–3 add rocks and mines. */
-export type HitCause = 'missile' | 'ram'
+/** What cost the ship a point of hull. */
+export type HitCause = 'missile' | 'ram' | 'rock' | 'mine'
 
 /**
  * One stage attempt's playtest metrics (design v0.2 §12): enough to see
@@ -63,6 +63,9 @@ interface GameState {
   musicVolume: number
   sfxVolume: number
   paused: boolean
+  /** Bumped by every restart of a stage, so a restart from the pause menu
+   *  (already 'playing') still reloads the stage. */
+  runSerial: number
 
   setPhase: (p: GameState['phase']) => void
   setCore: (c: CoreView) => void
@@ -70,12 +73,14 @@ interface GameState {
   setClock: (timeLeft: number, duration: number) => void
   setHint: (h: Hint | null) => void
   setReport: (r: StageReport | null) => void
-  startRun: (mode: GameMode) => void
+  /** Story from the start, or a trial of one stage. */
+  startRun: (mode: GameMode, stage?: number) => void
   /** Play a story scene (combat waits until it finishes). */
   playScene: (scene: SceneId) => void
   /** The current scene ended or was skipped. */
   finishScene: () => void
-  /** After a loss (or a cleared trial): the same stage again, no dialog. */
+  /** After a loss, a cleared trial, or from the pause menu: the same stage
+   *  again from the top, no dialog. */
   retryStage: () => void
   /** Story, from the stage-clear results: on to the next briefing. */
   continueRun: () => void
@@ -98,6 +103,7 @@ const freshPlay = {
   timeLeft: 0,
   duration: 1,
   paused: false,
+  runSerial: 0,
   core: freshCore,
   hint: null as Hint | null,
   report: null as StageReport | null,
@@ -151,10 +157,12 @@ export const useGameStore = create<GameState>((set) => ({
     (s.timeLeft === timeLeft && s.duration === duration ? s : { timeLeft, duration })),
   setHint: (hint) => set({ hint }),
   setReport: (report) => set({ report }),
-  startRun: (mode) => set((s) => ({
+  startRun: (mode, stage = 1) => set((s) => ({
     ...freshPlay,
     soundEnabled: s.soundEnabled,
     mode,
+    stage,
+    runSerial: s.runSerial + 1,
     // Story opens on stage 1's briefing; a trial drops straight into play.
     ...(mode === 'story' ? { phase: 'story' as const, storyScene: 'stage1' as const } : {}),
   })),
@@ -167,7 +175,9 @@ export const useGameStore = create<GameState>((set) => ({
     if (s.storyScene === 'ending') return { phase: 'complete', storyScene: null }
     return { phase: 'playing', storyScene: null }
   }),
-  retryStage: () => set({ phase: 'playing', paused: false, talk: null, report: null, storyScene: null }),
+  retryStage: () => set((s) => ({
+    phase: 'playing', paused: false, talk: null, report: null, storyScene: null, runSerial: s.runSerial + 1,
+  })),
   continueRun: () => set((s) => {
     if (s.phase !== 'stageclear' || s.mode !== 'story') return s
     if (s.stage < STORY_STAGES.length) {

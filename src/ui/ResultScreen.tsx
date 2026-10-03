@@ -50,11 +50,12 @@ export function ResultScreen({ kind }: { kind: Kind }) {
   const unfinished = STORY_STAGES.length < STORY_LENGTH
   const heading = kind === 'stageclear' ? `STAGE ${stage} CLEAR`
     : kind === 'gameover' ? 'GAME OVER'
-    : unfinished ? 'TO BE CONTINUED' : 'MISSION COMPLETE'
+    : unfinished ? 'TO BE CONTINUED' : 'ESCAPED'
   const good = kind !== 'gameover'
   const sub = kind === 'stageclear' ? `✓ ${stageConfig(stage).mission}`
     : kind === 'gameover' ? '追兵追上了'
-    : unfinished ? `原型目前到第 ${STORY_STAGES.length} 關，第 ${STORY_STAGES.length + 1}–${STORY_LENGTH} 關製作中` : ''
+    : unfinished ? `原型目前到第 ${STORY_STAGES.length} 關，第 ${STORY_STAGES.length + 1}–${STORY_LENGTH} 關製作中`
+    : '同步跳躍完成，所有人都在。'
 
   return (
     <div style={{
@@ -76,10 +77,10 @@ export function ResultScreen({ kind }: { kind: Kind }) {
         </div>
       )}
 
-      {report && kind !== 'complete' && <ReportTable r={report} />}
+      {report && <ReportTable r={report} />}
 
       <div style={{ marginTop: 22, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {report && kind !== 'complete' && (
+        {report && (
           <button onClick={copy} style={buttonStyle('#33aadd')}>{copied ? 'COPIED' : 'COPY RESULT'}</button>
         )}
         <button onClick={primary} style={{ ...buttonStyle('#8888ff'), color: blink ? '#ccccff' : '#8899aa' }}>
@@ -108,7 +109,7 @@ function ReportTable({ r }: { r: StageReport }) {
   const rows: [string, string | number][] = [
     ['TIME', `${clock(r.seconds)} / ${clock(r.duration)}`],
     ['HULL LEFT', `${r.hullLeft} / ${HULL.max}`],
-    ['HITS', `MISSILE ${r.hits.missile} · RAM ${r.hits.ram}`],
+    ['HITS', `MISSILE ${r.hits.missile} · RAM ${r.hits.ram} · ROCK ${r.hits.rock} · MINE ${r.hits.mine}`],
     ['ROUNDS ABSORBED', r.rounds],
     ['ENERGY BANKED', `${r.banked}  (${r.wasted} OVER LIMIT)`],
     ['EMP PULSES', r.emps],

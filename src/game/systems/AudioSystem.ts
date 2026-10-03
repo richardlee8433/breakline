@@ -67,6 +67,11 @@ class AudioSystem {
     this.fire(SFX['missile-lock'], 1.5)
   }
 
+  /** A mine's fuse is lit: urgent, higher than the missile lock. */
+  playMineArm() {
+    this.fire(SFX['mine-arm'], 1.8)
+  }
+
   /** Heavier, lower thump than any energy cue: a missile is coming. */
   playMissileLaunch() {
     this.fire(SFX['missile-launch'], 0.75)

@@ -5,6 +5,7 @@ import { InputSystem } from '../systems/InputSystem'
 import { ScrollSystem } from '../systems/ScrollSystem'
 import { CollisionSystem } from '../systems/CollisionSystem'
 import { WaveSystem } from '../systems/WaveSystem'
+import { HazardSystem } from '../systems/HazardSystem'
 import { CoreSystem } from '../systems/CoreSystem'
 import { BulletPool } from '../entities/BulletPool'
 import { Player } from '../entities/Player'
@@ -19,10 +20,12 @@ import { EngineExhaust } from '../fx/EngineExhaust'
 import { FloatingTextPool } from '../fx/FloatingText'
 import { musicSystem } from '../systems/MusicSystem'
 import { audioSystem } from '../systems/AudioSystem'
-import { EMP, FIELD, HULL } from '../data/chase'
-import { stageConfig } from '../data/stages'
+import { EMP, FIELD, HULL, JUMP } from '../data/chase'
+import { stageConfig, StageConfig } from '../data/stages'
 import { gameStore, HitCause, Hint } from '../../store/gameStore'
 import type { Speaker } from '../data/story'
+
+const freshHits = (): Record<HitCause, number> => ({ missile: 0, ram: 0, rock: 0, mine: 0 })
 
 import {
   STAGE_W as W, STAGE_H as H, SPRITE_SCALE,
@@ -32,6 +35,18 @@ import {
 const IS_TOUCH = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 const EMP_RADIUS = EMP.radiusFrac * PLAYFIELD_W
+
+/** A short radio line, said once per run when its condition first holds.
+ *  Urgent ones (threat warnings) cut in; the rest wait for a quiet moment. */
+interface Cue {
+  key: string
+  who: Speaker | null
+  text: string
+  tone: Hint['tone']
+  seconds: number
+  urgent?: boolean
+  when: () => boolean
+}
 
 /**
  * The chase: survive the stage's clock while pursuers close in from behind.
@@ -46,6 +61,7 @@ export class GameApp {
 
   private scroll!: ScrollSystem
   private waves!: WaveSystem
+  private hazards!: HazardSystem
   private energy!: BulletPool
   private missiles!: BulletPool
   private hostile!: HostilePools
@@ -55,6 +71,7 @@ export class GameApp {
   private floats!: FloatingTextPool
   private exhaust!: EngineExhaust
   private field!: AbsorbField
+  private jumpG = new Graphics()
 
   private bgLayer!: Container
   private gameLayer!: Container
@@ -62,17 +79,21 @@ export class GameApp {
   private fxLayer!: Container
 
   // Per-stage state.
+  private cfg!: StageConfig
   private elapsed = 0
   private duration = 1
   private deathTimer = 0       // > 0: the ship is gone, game over follows
+  private jumpTimer = 0        // > 0: stage 3's synchronized jump is playing
+  private finaleOn = false
   private empHeld = true       // edge detection: one press, one pulse
   private hudAcc = 0
   private lastCoreKey = ''
-  private stats = { disabled: 0, shaken: 0, still: 0, hits: { missile: 0, ram: 0 } as Record<HitCause, number> }
+  private stats = { disabled: 0, shaken: 0, still: 0, hits: freshHits() }
   // Radio lines already used this run (each plays once).
   private said = new Set<string>()
   private hintTimer = 0
   private hintSerial = 0
+  private cues: Cue[] = this.buildCues()
 
   constructor(private canvas: HTMLCanvasElement) {
     this.app = new Application()
@@ -146,13 +167,21 @@ export class GameApp {
     this.shockwave  = new Shockwave(this.fxLayer)
     this.floats     = new FloatingTextPool(this.fxLayer)
     this.waves      = new WaveSystem(this.gameLayer)
-    await this.waves.loadTextures()
+    // Terrain sits under every ship.
+    const hazardLayer = new Container()
+    this.gameLayer.addChildAt(hazardLayer, 0)
+    this.hazards    = new HazardSystem(hazardLayer)
+    this.fxLayer.addChild(this.jumpG)
+    await Promise.all([this.waves.loadTextures(), this.hazards.load()])
 
     gameStore.subscribe((s, prev) => {
       if (prev.phase === 'title' && s.phase !== 'title') this.said.clear()
       // Every way into combat — a trial START, a finished briefing, a retry
-      // — loads the stage from scratch.
-      if (s.phase === 'playing' && prev.phase !== 'playing') this.startStage(s.stage)
+      // (also from the pause menu, already in 'playing') — loads the stage
+      // from scratch.
+      if (s.phase === 'playing' && (prev.phase !== 'playing' || s.runSerial !== prev.runSerial)) {
+        this.startStage(s.stage)
+      }
       if (s.phase === 'story' && prev.phase !== 'story') this.enterStory()
       // A conversation just closed: the key that closed it must not also
       // fire the EMP on the first resumed frame.
@@ -200,17 +229,22 @@ export class GameApp {
   /** Fresh stage: full hull, empty gauge, clock at zero, timeline rewound. */
   private startStage(stageNum: number) {
     const cfg = stageConfig(stageNum)
+    this.cfg = cfg
     musicSystem.playStage(cfg.id)
     this.scroll.setTheme(cfg.bgTheme)
     this.waves.loadStage(cfg)
+    this.hazards.loadStage(cfg)
     this.clearField()
     this.player.reset()
     this.core.reset()
     this.elapsed = 0
     this.duration = cfg.duration
     this.deathTimer = 0
+    this.jumpTimer = 0
+    this.finaleOn = false
+    this.jumpG.clear()
     this.empHeld = true
-    this.stats = { disabled: 0, shaken: 0, still: 0, hits: { missile: 0, ram: 0 } }
+    this.stats = { disabled: 0, shaken: 0, still: 0, hits: freshHits() }
     const s = gameStore.getState()
     s.setReport(null)
     s.setHull(this.player.hull)
@@ -238,7 +272,10 @@ export class GameApp {
   private enterStory() {
     const s = gameStore.getState()
     this.waves.dismissAll()
+    this.hazards.clear()
     this.clearField()
+    this.jumpTimer = 0
+    this.jumpG.clear()
     this.player.reset()
     if (s.storyScene !== 'ending') this.scroll.setTheme(stageConfig(s.stage).bgTheme)
     s.setHint(null)
@@ -256,12 +293,16 @@ export class GameApp {
     if (state.phase !== 'playing' || state.talk) return
     if (hitstop.update(dt)) return
 
+    // Stage 3 is won: the jump plays out, nothing can hurt the ship.
+    if (this.jumpTimer > 0) { this.updateJump(dt); return }
+
     // The ship is gone: let the wreck burn for a beat, then game over.
     if (this.deathTimer > 0) {
       this.deathTimer -= dt
       this.energy.update(dt, W, H)
       this.missiles.update(dt, W, H)
       this.waves.update(dt, this.hostile, this.player.x, this.player.y)
+      this.hazards.update(dt, this.player, this.explosions)
       if (this.deathTimer <= 0) {
         this.finishStage(false)
         gameStore.getState().setPhase('gameover')
@@ -285,6 +326,7 @@ export class GameApp {
     if (empPressed && this.core.fireEmp()) this.fireEmp()
 
     this.exhaust.update(dt, this.player.x, this.player.y, true)
+    this.steerMissiles(dt)
     this.energy.update(dt, W, H)
     this.missiles.update(dt, W, H)
     const shaken = this.waves.update(dt, this.hostile, this.player.x, this.player.y)
@@ -298,11 +340,47 @@ export class GameApp {
       this.field.spawnCatch(x, y)
     })
     this.collision.check(this.missiles, this.waves.enemies, this.player)
+    this.hazards.update(dt, this.player, this.explosions)
     if (this.player.lastHit) this.onHit(this.player.lastHit)
 
     this.field.update(dt, this.player.x, this.player.y, !this.player.isDead)
+    if (this.cfg.finale && !this.finaleOn && this.duration - this.elapsed <= this.cfg.finale) {
+      this.finaleOn = true
+      musicSystem.playBoss()   // the last interception gets the boss theme
+    }
     this.radioCues()
     this.syncHud(dt)
+
+    // Story: the first mine on screen stops the chase once, so Rosa can
+    // explain the fuse before anyone learns it the hard way.
+    if (state.mode === 'story' && this.hazards.minesSeen && !this.said.has('tut-mine')) {
+      this.said.add('tut-mine')
+      gameStore.getState().setHint(null)
+      gameStore.getState().playTalk('tut-mine')
+    }
+  }
+
+  /** Guided missiles turn toward the ship at a limited rate and burn out
+   *  after GUIDED.life, so crossing their path always loses them. */
+  private steerMissiles(dt: number) {
+    const px = this.player.x, py = this.player.y
+    for (const m of this.missiles.all) {
+      if (!m.active || m.turn <= 0) continue
+      m.life -= dt
+      if (m.life <= 0) {
+        this.explosions.spawn(m.sprite.x, m.sprite.y, 0.6)
+        this.missiles.release(m)
+        continue
+      }
+      const cur = Math.atan2(m.vy, m.vx)
+      let diff = Math.atan2(py - m.sprite.y, px - m.sprite.x) - cur
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      const a = cur + Math.max(-m.turn * dt, Math.min(m.turn * dt, diff))
+      const v = Math.sqrt(m.vx * m.vx + m.vy * m.vy)
+      m.vx = Math.cos(a) * v; m.vy = Math.sin(a) * v
+      m.sprite.rotation = a + Math.PI / 2
+    }
   }
 
   /** The EMP: everything running inside its reach goes dark, and the
@@ -350,16 +428,66 @@ export class GameApp {
     hitstop.trigger(0.06)
   }
 
-  /** Time's up with the ship in one piece: the stage is cleared. */
+  /** Time's up with the ship in one piece: the stage is cleared. On the
+   *  jump stage the synchronized jump plays first. */
   private winStage() {
     this.elapsed = this.duration
     // Clear the pursuit: nothing can hurt the ship from here on.
     for (const m of this.missiles.all) if (m.active) this.explosions.spawn(m.sprite.x, m.sprite.y, 0.7)
     this.waves.dismissAll()
+    this.hazards.clear()
     this.clearField()
     this.syncHud(0, true)
     this.finishStage(true)
+    if (this.cfg.jump) {
+      this.jumpTimer = JUMP.sequence
+      musicSystem.playJingle('stage-clear')
+      audioSystem.playEmp()
+      return
+    }
     gameStore.getState().setPhase('stageclear')
+  }
+
+  /**
+   * The synchronized jump (design v0.2 §9): a ring of light closes around
+   * the ship, the ship stretches and streaks forward, and the screen flashes
+   * white. Then the ending (story) or the results (trial).
+   */
+  private updateJump(dt: number) {
+    this.jumpTimer -= dt
+    const p = Math.min(1, 1 - this.jumpTimer / JUMP.sequence)
+    const s = this.player.sprite, g = this.jumpG
+    const x = s.x, y = s.y
+    g.clear()
+    // 0–0.55: the jump field forms around the ship.
+    const ring = Math.min(1, p / 0.35)
+    const R = (150 - 60 * ring) * SPRITE_SCALE
+    const spin = p * 14
+    g.circle(x, y, R).stroke({ color: 0x9ff8ff, width: 3 + 5 * ring, alpha: 0.4 + 0.5 * ring })
+    for (let i = 0; i < 8; i++) {
+      const a = spin + (i * Math.PI) / 4
+      g.moveTo(x + Math.cos(a) * R * 1.15, y + Math.sin(a) * R * 1.15)
+        .lineTo(x + Math.cos(a) * R * 1.4, y + Math.sin(a) * R * 1.4)
+    }
+    g.stroke({ color: 0xffffff, width: 2, alpha: 0.7 * ring })
+    // 0.55–0.85: stretch and streak up-screen.
+    if (p > 0.55) {
+      const q = Math.min(1, (p - 0.55) / 0.3)
+      s.scale.y = this.player.baseScale * (1 + 1.6 * q)
+      s.y -= (200 + 2400 * q * q) * SPRITE_SCALE * dt
+      s.tint = 0xb8fbff
+    }
+    // 0.8–1: white-out.
+    if (p > 0.8) {
+      const f = Math.min(1, (p - 0.8) / 0.12) * (p > 0.92 ? Math.max(0, 1 - (p - 0.92) / 0.08) : 1)
+      g.rect(0, 0, W, H).fill({ color: 0xffffff, alpha: f })
+    }
+    if (this.jumpTimer > 0) return
+    g.clear()
+    s.visible = false
+    const st = gameStore.getState()
+    if (st.mode === 'story') st.playScene('ending')
+    else st.setPhase('stageclear')
   }
 
   private finishStage(cleared: boolean) {
@@ -387,21 +515,45 @@ export class GameApp {
 
   /** Short radio lines, each once per run. They never stop the chase. */
   private radioCues() {
-    const left = this.duration - this.elapsed
-    if (!this.said.has('lock') && this.waves.enemies.some((e) => e.active && e.locking)) {
-      this.say('lock', 'rosa', '飛彈鎖定！橘色的吸不掉，看到就閃。', 'warn', 4)
-    } else if (!this.said.has('ready') && this.core.empReady) {
-      this.say('ready', 'rosa', IS_TOUCH ? 'EMP 充滿了。追兵靠近時按 EMP。' : 'EMP 充滿了。追兵靠近時按 E 或 Space。', 'info', 4)
-    } else if (!this.said.has('shaken') && this.stats.shaken > 0) {
-      this.say('shaken', 'kai', '甩掉一架。', 'info', 2.5)
-    } else if (!this.said.has(`last30-${gameStore.getState().stage}`) && left <= 30 && this.duration > 45) {
-      this.say(`last30-${gameStore.getState().stage}`, 'mira', '還有三十秒，撐住！', 'info', 3)
+    for (const c of this.cues) {
+      if (this.said.has(c.key) || !c.when()) continue
+      if (this.hintTimer > 0 && !c.urgent) return   // wait for a quiet moment
+      this.said.add(c.key)
+      this.radio(c.who, c.text, c.tone, c.seconds)
+      return
     }
   }
 
-  private say(key: string, who: Speaker, text: string, tone: Hint['tone'], seconds: number) {
-    this.said.add(key)
-    this.radio(who, text, tone, seconds)
+  /** Built once: the conditions read live state through `this`. Order is
+   *  priority. Stage-specific keys carry the stage number. */
+  private buildCues(): Cue[] {
+    const active = (pred: (e: { def: { attack: string; hardened?: boolean }; state: string }) => boolean) =>
+      this.waves.enemies.some((e) => e.active && e.state === 'chase' && pred(e))
+    const left = () => this.duration - this.elapsed
+    const stage = () => gameStore.getState().stage
+    return [
+      { key: 'lock', who: 'rosa', text: '飛彈鎖定！橘色的吸不掉，看到就閃。', tone: 'warn', seconds: 4, urgent: true,
+        when: () => this.waves.enemies.some((e) => e.active && e.locking) },
+      { key: 'guided', who: 'rosa', text: '粉紅色的飛彈會轉彎，但轉不快。橫向甩開它。', tone: 'warn', seconds: 4.5, urgent: true,
+        when: () => active((e) => e.def.attack === 'guided') },
+      { key: 'hardened', who: 'rosa', text: '紫色引擎的是抗干擾型，EMP 只能讓它停一下。', tone: 'warn', seconds: 4.5, urgent: true,
+        when: () => active((e) => !!e.def.hardened) },
+      { key: 'rocks', who: 'rosa', text: '上緣的橘色標記是岩塊落點，找空隙穿過去。', tone: 'info', seconds: 4, urgent: true,
+        when: () => this.hazards.rocksSeen },
+      { key: 'mines', who: 'rosa', text: '感應水雷：靠近就倒數一秒爆炸。看到紅圈就往外飛。', tone: 'warn', seconds: 5, urgent: true,
+        when: () => this.hazards.minesSeen && gameStore.getState().mode === 'trial' },
+      { key: 'ready', who: 'rosa', text: IS_TOUCH ? 'EMP 充滿了。追兵靠近時按 EMP。' : 'EMP 充滿了。追兵靠近時按 E 或 Space。',
+        tone: 'info', seconds: 4, when: () => this.core.empReady },
+      { key: 'shaken', who: 'kai', text: '甩掉一架。', tone: 'info', seconds: 2.5, when: () => this.stats.shaken > 0 },
+      { key: 'jump-half', who: 'mira', text: '跳躍充能過半了，再撐兩分鐘。', tone: 'info', seconds: 3.5,
+        when: () => !!this.cfg.jump && this.elapsed >= this.duration / 2 },
+      { key: 'finale', who: 'thorne', text: '全隊，最後攔截。不准讓他們跳走。', tone: 'warn', seconds: 4, urgent: true,
+        when: () => !!this.cfg.finale && left() <= this.cfg.finale },
+      { key: 'last30-1', who: 'mira', text: '入口就在前面，還有三十秒！', tone: 'info', seconds: 3,
+        when: () => stage() === 1 && left() <= 30 && this.duration > 45 },
+      { key: 'last30-2', who: 'mira', text: '出口快到了，還有三十秒！', tone: 'info', seconds: 3,
+        when: () => stage() === 2 && left() <= 30 && this.duration > 45 },
+    ]
   }
 
   private radio(who: Speaker | null, text: string, tone: Hint['tone'], seconds: number) {

@@ -13,8 +13,9 @@ export interface EnemyDef {
   fireRate: number
   bulletSpeed: number
   /** fan: an aimed fan of energy rounds. missile: lock on, then one aimed
-   *  missile. */
-  attack: 'fan' | 'missile'
+   *  missile. guided: lock on, then a missile that turns after the ship
+   *  (GUIDED in chase.ts). */
+  attack: 'fan' | 'missile' | 'guided'
   fanCount?: number
   /** Seconds it keeps up the chase before falling back on its own. */
   chaseTime: number
@@ -37,8 +38,29 @@ export const ENEMIES: Record<string, EnemyDef> = {
     sprite: './assets/enemies/enemy-elite.png',
     speed: 200, scale: 0.82,
     engineColor: 0xff7a24, engineCount: 2,
-    fireRate: 2.6, bulletSpeed: 250,
+    fireRate: 2.3, bulletSpeed: 250,
     attack: 'missile',
     chaseTime: 20,
+  },
+  // Stage 3 — guided missile ship: its missiles turn after the ship, but
+  // slowly and not for long. Cross their path to lose them.
+  guided: {
+    sprite: './assets/enemies/enemy-interceptor.png',
+    speed: 210, scale: 0.8,
+    engineColor: 0xff4fa0, engineCount: 2,
+    fireRate: 3.0, bulletSpeed: 215,
+    attack: 'guided',
+    chaseTime: 18,
+  },
+  // Stage 3 — EMP-hardened pursuer: a heavier silhouette and violet
+  // engines. An EMP still stops it, for 1.5 s instead of 4.
+  hardened: {
+    sprite: './assets/enemies/enemy-gunship.png',
+    speed: 190, scale: 0.84,
+    engineColor: 0xb06bff, engineCount: 2,
+    fireRate: 2.4, bulletSpeed: 250,
+    attack: 'missile',
+    chaseTime: 22,
+    hardened: true,
   },
 }

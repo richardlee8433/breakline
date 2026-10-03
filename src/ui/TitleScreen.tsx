@@ -19,8 +19,10 @@ export function TitleScreen() {
       }
       if (e.code === 'KeyO') { setSettings(true); return }
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun('story')
-      // Stage 1 straight away, no dialog: quick playtests.
-      if (e.code === 'Digit2') startRun('trial')
+      // One stage straight away, no dialog: quick playtests.
+      if (e.code === 'Digit2') startRun('trial', 1)
+      if (e.code === 'Digit3') startRun('trial', 2)
+      if (e.code === 'Digit4') startRun('trial', 3)
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
@@ -67,7 +69,25 @@ export function TitleScreen() {
 
       <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {option('story', 'STORY', 'WITH BRIEFINGS · TAP · SPACE · 1', true)}
-        {option('trial', 'STAGE 1 TRIAL', 'NO DIALOG · PLAYTEST · PRESS 2', false)}
+        <div style={{ width: 360, margin: '0 auto' }}>
+          <div style={{ fontSize: 11, letterSpacing: 2, color: '#556677', textAlign: 'center', marginBottom: 6 }}>
+            STAGE TRIAL · NO DIALOG · PRESS 2 / 3 / 4
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[1, 2, 3].map((n) => (
+              <button
+                key={n}
+                onPointerDown={(e) => { e.stopPropagation(); startRun('trial', n) }}
+                style={{
+                  flex: 1, padding: '10px 0', fontFamily: 'monospace', letterSpacing: 2, fontSize: 14,
+                  cursor: 'pointer', background: 'transparent', border: '1px solid #334455', color: '#8899aa',
+                }}
+              >
+                STAGE {n}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           // Open on click (after release), not pointerdown: on touch, the click
           // that follows the tap would otherwise land on the panel's DONE

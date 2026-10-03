@@ -9,7 +9,7 @@ const EXPLOSION_TILES = [16, 17, 18, 19, 20, 21]
 
 // Load via HTMLImageElement instead of Pixi's Assets.load(), which uses a
 // blob-URL worker (null origin) that gets 403'd by VIVERSE's CDN.
-function loadTexture(src: string): Promise<Texture> {
+export function loadTexture(src: string): Promise<Texture> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(Texture.from(img))

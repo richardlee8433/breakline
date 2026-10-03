@@ -8,7 +8,7 @@ Lastlight 同宇宙的短篇縱向**追逐逃生**。玩家護送撤離船，追
 - 舊的規劃書 [`docs/Breakline_Game_Plan_v0.1.txt`](docs/Breakline_Game_Plan_v0.1.txt) 只作為世界觀參考。玩法以 v0.2 為準。
 - 改版前的「吸收射擊」版本保留在 tag `v0.1-absorb-shooter`。
 - 程式碼從 [neon-raiden](https://github.com/richardlee8433/neon-raiden) fork 出來。
-- **目前狀態：Phase A。** 第一關的完整循環已完成；第二關（小行星）、第三關（水雷）還沒做。
+- **目前狀態：Phase A–C 已完成。** 三關都可以玩，包含跳躍和結局。接下來是 Phase D：試玩調整。
   - 2026-10-03 已確定的決策：
     - 能源彈完全無害。
     - 主角在畫面中上方移動。
@@ -37,19 +37,20 @@ src/
     core/GameApp.ts       # Pixi Application、主 ticker、關卡計時、EMP、受傷、短句通訊、試玩報告
     data/
       chase.ts            # 玩家活動帶、吸收場、能量、EMP、耐久、追兵行為的所有數值
-      enemies.ts          # 追兵屬性表（attack: fan = 能源彈 | missile = 鎖定後發射飛彈）
-      stages.ts           # STORY_STAGES（目前只有第一關）、波次時間軸、stageConfig()
+      enemies.ts          # 追兵屬性表（attack: fan = 能源彈 | missile = 鎖定後發射飛彈 | guided = 制導飛彈）
+      stages.ts           # 三關：追兵波次、小行星區段（rocks）、水雷波次（mines）、jump / finale
       story.ts            # 三關開場與結局台詞（v0.2 劇本）
       audio.ts            # 音效清單
     entities/             # Player（耐久、活動帶）、Enemy（追兵狀態機）、BulletPool
     systems/
       CoreSystem.ts       # 能量入帳（每秒上限）、EMP 就緒與間隔、試玩計數
       CollisionSystem.ts  # absorb() 先跑、check() 後跑
-      WaveSystem.ts       # 依時間軸從下緣放出追兵
+      WaveSystem.ts       # 依時間軸從下緣放出追兵；追兵之間有側向分離
+      HazardSystem.ts     # 前方地形：小行星列（保證通道）、水雷狀態機、上緣預告標記
       Input / Scroll / Audio / Music / SampleBank / BulletPatterns
     fx/                   # AbsorbField（圓形場）、Shockwave（EMP）、Explosion、EngineExhaust、FloatingText...
   store/gameStore.ts      # Zustand：phase, stage, hull, timeLeft, core（HUD 鏡像）, hint, report
-  ui/                     # HUD, EmpPanel, TitleScreen, ResultScreen（過關 / 失敗 / 完結）, StoryDialog, SettingsPanel
+  ui/                     # HUD, EmpPanel, PauseMenu, TitleScreen, ResultScreen（過關 / 失敗 / 完結）, StoryDialog, SettingsPanel
   art/portraits.ts        # 對話立繪（手繪胸像 + 像素後備）
 public/assets/            # 所有圖片與音訊，不要放進 src/
 docs/                     # 設計文件、角色設定
@@ -69,7 +70,8 @@ docs/                     # 設計文件、角色設定
 2. 死亡演出中（`deathTimer`）：只讓場面繼續動，時間到後進 gameover。
 3. **先推進關卡時鐘。時間到就過關並 return**：同一幀「到時」優先於「被撞」。
 4. 讀輸入，對 EMP 做 edge detect（按住不會自動連發）→ `player.update` → `core.update` → EMP。
-5. 子彈移動 → `waves.update`（回傳本幀甩脫數）→ **`collision.absorb()`** → **`collision.check()`** → 處理 `player.lastHit`。
+5. 制導飛彈轉向 → 子彈移動 → `waves.update`（回傳本幀甩脫數）→ **`collision.absorb()`** → **`collision.check()`** → `hazards.update`（小行星碰撞、水雷）→ 處理 `player.lastHit`。
+6. 跳躍演出中（`jumpTimer`，只有第三關）：不做任何傷害判定，演完進結局（故事）或結算（試玩）。
 
 ### Object pooling（強制）
 - 子彈、追兵、爆炸、浮動文字、吸收動畫都走 pool，ticker 內不要 `new` 遊戲物件。
@@ -102,6 +104,16 @@ docs/                     # 設計文件、角色設定
   - 範圍內的能源彈和飛彈清除。範圍外不受影響。不給玩家無敵。
 - **耐久**：每關 `HULL.max` 格，被打中後無敵 `HULL.iframes` 秒。歸零後播 `HULL.deathBeat` 秒的死亡演出，再進 gameover。
 - **飛彈**：先鎖定（`LOCK.time`，有鎖定框和警示音），再朝玩家當下的位置發射。
+  - 制導飛彈（粉紅色）的轉向速度有上限（`GUIDED.turnRate`），`GUIDED.life` 秒後熄火。
+- **小行星**：以列生成。每列保留至少 `gap` 寬的通道，通道每列最多移動 `drift`。
+  - 列距要大於最大岩石直徑，玩家才有空間換道。改 `every` / 尺寸時要守住這一點。
+  - 碰到扣 1 格，岩石不會消失。
+- **水雷**：狀態是 `idle → armed → blast`。
+  - 進入 `triggerRadius` 就點燃 1 秒引信，離開也不會取消。
+  - 爆炸只在引爆那一幀判定一次，範圍是 `blastRadius`。
+  - EMP 不影響水雷，也沒有連鎖爆炸。
+- **預告**：小行星和水雷都會先在上緣顯示標記（`ROCK.preview` / `MINE.preview`），再進場。
+- **重來**：從暫停選單重來時，`phase` 仍是 playing，所以靠 `runSerial` 遞增觸發 `startStage`。
 - **計時**：只在追逐實際進行時累積。對話、暫停、切換分頁（自動暫停）都不計時。
 - **短句通訊**：用 `GameApp.say()` 在 HUD 頂端顯示，每局各一次，不暫停遊戲。
 
@@ -115,14 +127,14 @@ title → story(stage1) → playing → [時間到] stageclear（結果畫面）
 gameover → RETRY（同一關，不重播對話）或 BRIEFING（重看開場）
 ```
 
-- 還沒做好的關卡：`STORY_STAGES` 只到第一關時，CONTINUE 會進 complete（TO BE CONTINUED 畫面）。
+- 第三關結束時不經過 stageclear：先播跳躍演出，再直接進 `ending`。結局之後的 complete 畫面會顯示第三關的報告。
 - **store**：
   - `startRun(mode)`，mode 是 `'story' | 'trial'`。
   - 其他動作：`playScene(id)`、`finishScene()`、`retryStage()`、`continueRun()`、`autoPause()`。
 - **GameApp**：
   - 任何從非 playing 進入 playing 的轉換都會呼叫 `startStage`，重置耐久、能量、計時、波次。
   - 進入 story 時呼叫 `enterStory()`。
-- **talk**：戰鬥中暫停用的對話機制還保留著，給第三關的水雷說明使用。
+- **talk**：戰鬥中暫停用的對話，目前只有 `tut-mine`（故事模式中第一顆水雷完整進入畫面時）。試玩模式改用短句通訊。
 - **對話 UI**：`ui/StoryDialog.tsx`，移植自 Lastlight 的 `Dialog.tsx` 和 `.dlg` CSS，尺寸乘上 `--k`（= SPRITE_SCALE）。
 - **立繪**：`portraitURL(id)`（`src/art/portraits.ts`），規則同 Lastlight 的 portraitArt。
   - 有手繪圖的角色，用 `public/assets/portraits/<id>.webp`，從四人合圖切出的胸像，透明背景、底部淡出。這就是正式立繪。
@@ -134,7 +146,7 @@ gameover → RETRY（同一關，不重播對話）或 BRIEFING（重看開場�
 
 ## 試玩支援
 
-- 標題畫面按 2 是 STAGE 1 TRIAL：沒有對話，開場有一條操作提示。
+- 標題畫面按 2 / 3 / 4 是 STAGE TRIAL 1 / 2 / 3：沒有對話，開場有一條操作提示。
 - 每次過關或失敗，`GameApp.finishStage()` 都會產生 `StageReport`，結算畫面會顯示，並可以複製成 JSON。
   - 報告包含 `stillPct`（站著不動的時間比例），用來檢查「站著就能過關」。
 - `?time=0.25` 會縮短關卡長度和波次時間，只供開發測試用。
@@ -152,17 +164,19 @@ headless Chromium 沒有 GPU，FPS 量不準。比較可靠的方法是：
 
 ## 開發階段（v0.2 第十一節）
 
-- **A**（完成）：第一關的完整循環。包括常駐吸收場、能量、後方追兵、EMP、飛彈、120 秒勝利、開場、重試和試玩報告。
-- **B**：第二關。小行星固定編排，保證有可通行路線並提供預覽，接上開場與流程。
-- **C**：第三關。水雷狀態機（觸發後 1 秒爆炸，EMP 無效）、制導飛彈機、抗 EMP 機、跳躍充能 %、同步跳躍演出、結局。第一次遇到水雷時暫停說明一次。
-- **D**：驗證三關串接、暫停和手機輸入，再調整節奏與音畫回饋。
+- **A**（完成）：第一關的完整循環。
+- **B**（完成）：第二關的小行星。
+- **C**（完成）：第三關的水雷、新追兵、跳躍和結局。另外加了暫停選單。
+- **D**：試玩調整節奏與音畫回饋。
 
 ## Known debt
 
 - 數值全部未經試玩：能源供給量、EMP 間隔、飛彈密度、追兵停留時間都需要調整。
-- 音效是從現有素材挑的，還沒實際聽過調整：鎖定用 `alarm2`（加速），EMP 用 `bigshot3` + `explosion3`，吸收用 `gem-alt`。
+- 音效是從現有素材挑的，還沒實際聽過調整：鎖定用 `alarm2`（加速），水雷引信用 `alarm1`（加速），EMP 用 `bigshot3` + `explosion3`，吸收用 `gem-alt`。
+- 小行星和水雷會從追兵身上穿過去（追兵不會閃避地形）。
+- 跳躍演出只畫了玩家的戰機，畫面上沒有撤離船。
 - EMP 演出還沒有通訊雜訊，以及「追擊警報短暫減弱」的效果（v0.2 第四節）。
-- `public/assets` 留著舊版的素材，目前沒在用：Boss 圖、pickup 圖。MusicSystem 的 boss 曲目也沒在用。
+- `public/assets` 留著舊版的素材，目前沒在用：Boss 圖、pickup 圖。Boss 曲目現在用在第三關最後 30 秒。
 
 ## Don't
 - 不要在 update loop 裡 `console.log`。

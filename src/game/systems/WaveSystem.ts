@@ -2,11 +2,13 @@ import { Container, Texture } from 'pixi.js'
 import { StageConfig, ChaseWave, Lane } from '../data/stages'
 import { ENEMIES, EnemyDef } from '../data/enemies'
 import { Enemy, HostilePools } from '../entities/Enemy'
-import { PLAYFIELD_LEFT, PLAYFIELD_W } from '../config'
+import { PLAYFIELD_LEFT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
 
 const POOL_SIZE = 60
 /** Seconds between members of one wave reaching the bottom edge. */
 const STAGGER = 0.35
+/** Pursuers closer than this nudge apart instead of stacking up. */
+const SEPARATION = 58 * SPRITE_SCALE
 
 interface PendingSpawn { at: number; x: number; def: EnemyDef; tex: Texture }
 
@@ -63,7 +65,28 @@ export class WaveSystem {
     for (const e of this.enemies) {
       if (e.active && e.update(dt, pools, px, py)) shaken++
     }
+    this.separate(dt)
     return shaken
+  }
+
+  /** Pursuers on station spread out sideways rather than piling onto one
+   *  spot. A steering nudge, not collision: a dozen ships at most. */
+  private separate(dt: number) {
+    const list = this.enemies
+    const k = Math.min(1, 6 * dt)
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i]
+      if (!a.active || a.state !== 'chase') continue
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j]
+        if (!b.active || b.state !== 'chase') continue
+        const dx = b.sprite.x - a.sprite.x, dy = b.sprite.y - a.sprite.y
+        if (Math.abs(dx) >= SEPARATION || Math.abs(dy) >= SEPARATION) continue
+        const push = ((SEPARATION - Math.abs(dx)) / 2) * k * (dx >= 0 ? 1 : -1)
+        a.nudge(-push)
+        b.nudge(push)
+      }
+    }
   }
 
   private schedule(wave: ChaseWave) {

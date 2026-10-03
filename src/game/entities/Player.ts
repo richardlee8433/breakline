@@ -23,13 +23,16 @@ export class Player {
   private tilt = 0
   /** Distance moved last frame, for the "stood still" playtest metric. */
   moved = 0
+  /** The sprite's normal scale (the jump sequence stretches it). */
+  readonly baseScale: number
   /** Set by hit(); GameApp reads and clears it. */
   lastHit: HitCause | null = null
 
   constructor(container: Container, texture: Texture, private stageH: number) {
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
-    this.sprite.scale.set(PLAYER.displayH * SPRITE_SCALE / texture.height)
+    this.baseScale = PLAYER.displayH * SPRITE_SCALE / texture.height
+    this.sprite.scale.set(this.baseScale)
     container.addChild(this.sprite)
     this.reset()
   }
@@ -64,6 +67,7 @@ export class Player {
     this.tilt = 0
     this.lastHit = null
     this.sprite.rotation = 0
+    this.sprite.scale.set(this.baseScale)
     this.sprite.visible = true
     this.sprite.alpha = 1
     this.sprite.tint = 0xffffff
