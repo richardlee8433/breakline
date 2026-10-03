@@ -3,7 +3,7 @@ import { AdvancedBloomFilter } from 'pixi-filters'
 import { loadAssets } from '../../assets/AssetLoader'
 import { InputSystem } from '../systems/InputSystem'
 import { ScrollSystem } from '../systems/ScrollSystem'
-import { CollisionSystem } from '../systems/CollisionSystem'
+import { CollisionSystem, KillFx } from '../systems/CollisionSystem'
 import { WaveSystem } from '../systems/WaveSystem'
 import { BulletPool } from '../entities/BulletPool'
 import { Player } from '../entities/Player'
@@ -14,17 +14,15 @@ import { BombEffect } from '../fx/BombEffect'
 import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
 import { BulletTrail } from '../fx/BulletTrail'
-import { LaserBeam } from '../fx/LaserBeam'
 import { Shockwave } from '../fx/Shockwave'
 import { makeGlowBulletTexture } from '../fx/GlowTexture'
 import { GemPool } from '../entities/Gem'
 import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
-import { FloatingTextPool, multColor } from '../fx/FloatingText'
+import { FloatingTextPool } from '../fx/FloatingText'
 import { STAGES } from '../data/stages'
 import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
-import { spawnEnemyDrop } from '../systems/DropSystem'
 
 import {
   STAGE_W as W, STAGE_H as H, SPRITE_SCALE,
@@ -48,10 +46,10 @@ export class GameApp {
   private explosions!: ExplosionPool
   private bombEffect!: BombEffect
   private bulletTrail!: BulletTrail
-  private laser!: LaserBeam
   private exhaust!: EngineExhaust
   private shockwave!: Shockwave
   private floats!: FloatingTextPool
+  private killFx!: KillFx
 
   private bgLayer!: Container
   private gameLayer!: Container
@@ -136,22 +134,17 @@ export class GameApp {
     this.enemyBullets  = new BulletPool(this.bulletLayer, enemyBulletTex, 1000)
     this.bossBullets   = new BulletPool(this.bulletLayer, bossBulletTex,  200)
 
-    const plasmaBulletTex = makeGlowBulletTexture(this.app.renderer, 0xff55ee, 7 * SPRITE_SCALE)
-    this.player    = new Player(
-      this.gameLayer, assets.playerShip, this.playerBullets, plasmaBulletTex, W, H,
-    )
+    this.player    = new Player(this.gameLayer, assets.playerShip, this.playerBullets, H)
     this.boss      = new Boss(this.gameLayer)
-    this.pickups   = new PickupPool(
-      this.gameLayer,
-      assets.pickupPower, assets.pickupOneUp,
-      assets.pickupLaser, assets.pickupPlasma,
-    )
+    this.pickups   = new PickupPool(this.gameLayer, assets.pickupOneUp)
     this.gems      = new GemPool(this.gameLayer, assets.gem)
-    this.laser      = new LaserBeam(this.fxLayer, H)
     this.explosions = new ExplosionPool(this.fxLayer, assets.explosionFrames)
     this.bombEffect = new BombEffect(this.fxLayer, W, H)
     this.shockwave  = new Shockwave(this.fxLayer)
     this.floats     = new FloatingTextPool(this.fxLayer)
+    this.killFx     = {
+      explosions: this.explosions, floats: this.floats, pickups: this.pickups, gems: this.gems,
+    }
     this.exhaust    = new EngineExhaust(
       this.bulletLayer, makeGlowBulletTexture(this.app.renderer, 0x44aaff, 3.5 * SPRITE_SCALE))
 
@@ -302,19 +295,6 @@ export class GameApp {
       }
     }
 
-    const { weapon, laserPower } = gameStore.getState()
-    this.laser.update(
-      dt, weapon === 'laser' && this.player.firingLaser,
-      this.player.x, this.player.y,
-      laserPower,
-      this.waves.activeEnemies,
-      this.boss.active ? this.boss : null,
-      this.explosions,
-      this.gems,
-      this.floats,
-      this.pickups,
-    )
-
     // Enemy laser hits on player (registers a hit; death resolves below)
     for (const beam of activeLasers) {
       if (this.player.y > beam.fromY && Math.abs(this.player.x - beam.x) < 10) {
@@ -335,9 +315,9 @@ export class GameApp {
 
     this.collision.check(
       this.playerBullets, this.enemyBullets, this.bossBullets,
-      this.waves.activeEnemies,
+      this.waves.enemies,
       this.boss.active ? this.boss : null,
-      this.player, this.explosions, this.pickups, this.gems, this.floats,
+      this.player, this.killFx,
     )
 
     this.explosions.update(dt)
@@ -353,10 +333,6 @@ export class GameApp {
     audioSystem.playPlayerHit()
     const s = gameStore.getState()
     s.resetChain()   // death breaks the kill chain
-    s.dropPower()
-    const droppedWeapon = s.weapon === 'vulcan' ? 'power' : s.weapon
-    this.pickups.spawn(this.player.x - 30, this.player.y - 60, droppedWeapon)
-    this.pickups.spawn(this.player.x + 30, this.player.y - 60, droppedWeapon)
     s.loseLife()
     if (s.lives <= 1) s.setPhase('gameover')
   }

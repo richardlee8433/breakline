@@ -3,7 +3,7 @@ import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 import { SPRITE_SCALE } from '../config'
 
-export type PickupType = 'power' | 'oneup' | 'laser' | 'plasma'
+export type PickupType = 'oneup'
 
 interface PickupInstance {
   sprite: Sprite
@@ -19,21 +19,18 @@ export class PickupPool {
 
   constructor(
     private container: Container,
-    private texPower: Texture,
     private texOneUp: Texture,
-    private texLaser: Texture,
-    private texPlasma: Texture,
     size = 20,
   ) {
     for (let i = 0; i < size; i++) {
-      const sprite = new Sprite(texPower)
+      const sprite = new Sprite(texOneUp)
       sprite.anchor.set(0.5)
       // New pickup art uses a 48 px canvas rather than Kenney's 16 px tiles.
       // Keep the on-screen footprint readable without tripling its size.
       sprite.scale.set(0.8 * SPRITE_SCALE)
       sprite.visible = false
       container.addChild(sprite)
-      this.pool.push({ sprite, active: false, type: 'power' })
+      this.pool.push({ sprite, active: false, type: 'oneup' })
     }
   }
 
@@ -42,10 +39,7 @@ export class PickupPool {
     if (!inst) return
     inst.active = true
     inst.type = type
-    inst.sprite.texture = type === 'power' ? this.texPower
-                        : type === 'oneup' ? this.texOneUp
-                        : type === 'laser' ? this.texLaser
-                        : this.texPlasma
+    inst.sprite.texture = this.texOneUp
     inst.sprite.x = x
     inst.sprite.y = y
     inst.sprite.alpha = 1
@@ -61,12 +55,8 @@ export class PickupPool {
       const dx = inst.sprite.x - playerX
       const dy = inst.sprite.y - playerY
       if (dx * dx + dy * dy < COLLECT_RADIUS * COLLECT_RADIUS) {
-        const s = gameStore.getState()
-        if (inst.type === 'power')       s.addPower(1)
-        else if (inst.type === 'oneup')  s.addLife()
-        else if (inst.type === 'laser')  s.addLaserPower()
-        else                             s.addPlasmaPower()
-        audioSystem.playPickup(inst.type === 'oneup' ? 'life' : 'power')
+        gameStore.getState().addLife()
+        audioSystem.playPickup()
         inst.active = false
         inst.sprite.visible = false
         continue

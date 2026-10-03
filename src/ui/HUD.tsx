@@ -7,20 +7,12 @@ const IS_WIDE = PLAYFIELD_W < STAGE_W
 const WING_W = PLAYFIELD_LEFT
 
 export function HUD() {
-  const { score, hiScore, graze, chain, loop, lives, weapon,
+  const { score, hiScore, graze, chain, loop, lives,
           bossActive, bossHp, bossMaxHp, bossWarning,
           soundEnabled, toggleSound } = useGameStore()
   const mult = chainMult(chain)
   const chainColor = mult >= 8 ? '#ff44aa' : mult >= 4 ? '#ff9933'
                    : mult >= 2 ? '#ffee44' : '#cccccc'
-  const weaponLabel = weapon === 'vulcan' ? 'VULCAN' : weapon === 'laser' ? 'LASER' : 'PLASMA'
-  const weaponColor = weapon === 'vulcan' ? '#ff9a33' : weapon === 'laser' ? '#44ddff' : '#ff55ee'
-  const weaponLine = (
-    <span style={{ color: weaponColor, fontWeight: 'bold', textShadow: `0 0 6px ${weaponColor}` }}>
-      {weaponLabel}
-    </span>
-  )
-
   const mono = {
     color: '#fff', fontFamily: 'monospace', fontSize: 13,
     pointerEvents: 'none' as const, userSelect: 'none' as const,
@@ -30,7 +22,7 @@ export function HUD() {
   const soundButton = (
     <button
       // Blur after click so a focused button doesn't get re-triggered
-      // by the spacebar (which is the fire key).
+      // by the spacebar (which is a game key).
       onClick={(e) => { toggleSound(); e.currentTarget.blur() }}
       onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault() }}
       title="Toggle sound (M)"
@@ -88,7 +80,7 @@ export function HUD() {
             {chainLine}
           </div>
 
-          {/* Right wing: resources & weapon meters */}
+          {/* Right wing: resources */}
           <div style={{
             position: 'absolute', top: 14, left: PLAYFIELD_RIGHT, width: WING_W,
             padding: '0 14px', boxSizing: 'border-box',
@@ -96,7 +88,6 @@ export function HUD() {
             alignItems: 'flex-end', ...mono,
           }}>
             <span>{'♥'.repeat(Math.max(0, lives))}</span>
-            {weaponLine}
             <span style={{ pointerEvents: 'all', marginTop: 4 }}>{soundButton}</span>
           </div>
         </>
@@ -112,7 +103,6 @@ export function HUD() {
             <span>SCORE {String(score).padStart(6, '0')}</span>
             <span>HI {String(hiScore).padStart(6, '0')}</span>
             <span>{'♥'.repeat(Math.max(0, lives))}</span>
-            {weaponLine}
             {soundButton}
           </div>
 

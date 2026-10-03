@@ -11,8 +11,8 @@ export class BulletTrail {
 
   update(playerBullets: BulletPool) {
     this.g.clear()
-    for (const b of playerBullets.active) {
-      this.drawTrail(b.sprite.x, b.sprite.y)
+    for (const b of playerBullets.all) {
+      if (b.active) this.drawTrail(b.sprite.x, b.sprite.y)
     }
   }
 

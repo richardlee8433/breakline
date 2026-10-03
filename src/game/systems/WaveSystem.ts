@@ -30,7 +30,8 @@ interface PendingSpawn {
 }
 
 export class WaveSystem {
-  private enemies: Enemy[] = []
+  /** Every pooled enemy; check `.active` before touching one. */
+  readonly enemies: Enemy[] = []
   private pending: PendingSpawn[] = []
   private textures = new Map<string, Texture>()
   private elapsed = 0
@@ -148,10 +149,6 @@ export class WaveSystem {
     const spawnBoss = !this.bossTriggered && this.elapsed >= this.bossTriggerTime
     if (spawnBoss) this.bossTriggered = true
     return { spawnBoss, activeLasers }
-  }
-
-  get activeEnemies(): Enemy[] {
-    return this.enemies.filter((e) => e.active)
   }
 
   dismissAll() {

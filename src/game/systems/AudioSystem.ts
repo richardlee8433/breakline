@@ -40,9 +40,8 @@ class AudioSystem {
   }
 
   // ── weapons ─────────────────────────────────────────────────────────────
-  playShoot(power = 0) {
-    // Higher power reads as a slightly brighter shot, as it did before.
-    this.fire(SFX.shoot, 1 + power * 0.035)
+  playShoot() {
+    this.fire(SFX.shoot, 1.07)
   }
 
   playBossHurt() {
@@ -63,8 +62,8 @@ class AudioSystem {
   }
 
   // ── pickups & feedback ──────────────────────────────────────────────────
-  playPickup(type: 'power' | 'life') {
-    this.fire(type === 'life' ? SFX['pickup-life'] : SFX['pickup-power'])
+  playPickup() {
+    this.fire(SFX['pickup-life'])
   }
 
   /** Collect chime climbing one semitone per consecutive gem, as before. */

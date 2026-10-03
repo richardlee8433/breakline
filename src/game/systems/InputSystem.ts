@@ -1,8 +1,6 @@
 export interface Actions {
   moveX: number  // -1 | 0 | 1 (keyboard)
   moveY: number  // -1 | 0 | 1 (keyboard)
-  fire: boolean
-  focus: boolean // slow precise movement, shows hitbox dot
   // Touch drag deltas in canvas pixels, consumed each frame
   touchDX: number
   touchDY: number
@@ -14,7 +12,7 @@ const TOUCH_SENSITIVITY = 1.6
 export class InputSystem {
   private keys = new Set<string>()
   readonly actions: Actions = {
-    moveX: 0, moveY: 0, fire: false, focus: false,
+    moveX: 0, moveY: 0,
     touchDX: 0, touchDY: 0, touchActive: false,
   }
 
@@ -74,8 +72,6 @@ export class InputSystem {
     this.actions.moveY =
       (k.has('ArrowDown')  || k.has('KeyS') ? 1 : 0) -
       (k.has('ArrowUp')    || k.has('KeyW') ? 1 : 0)
-    this.actions.fire = k.has('Space') || this.touching
-    this.actions.focus = k.has('ShiftLeft') || k.has('ShiftRight')
 
     this.actions.touchActive = this.touching
     this.actions.touchDX = this.accDX * TOUCH_SENSITIVITY

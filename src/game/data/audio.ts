@@ -11,7 +11,7 @@ export const MUSIC_DIR = './assets/audio/music/'
 export type SfxKey =
   | 'shoot' | 'boss-hurt' | 'player-hit' | 'siren'
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
-  | 'pickup-power' | 'pickup-life'
+  | 'pickup-life'
   | 'gem' | 'graze'
 
 export interface SfxDef {
@@ -42,7 +42,6 @@ export const SFX: Record<SfxKey, SfxDef> = {
 
   // ── UI / feedback ──────────────────────────────────────────────────────
   siren:             { src: 'alarm3.ogg',       gain: 0.45 },
-  'pickup-power':    { src: 'pickup-power.ogg', gain: 0.50 },
   'pickup-life':     { src: 'pickup-life.ogg',  gain: 0.60 },
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },
