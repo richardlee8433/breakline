@@ -22,10 +22,10 @@ export interface ChaseWave {
 }
 
 /**
- * A stretch of asteroid field. Rocks arrive at random moments (a Poisson
- * process, `rate` per second on average) at random places, kept apart by a
- * minimum spacing (Poisson-disk / blue-noise placement), so the field has
- * no rows and no clumps. One clear path at least `gap` wide winds through
+ * A stretch of asteroid field. Rocks arrive at jittered moments (`rate` per
+ * second on average) at places chosen by best-candidate sampling, which
+ * keeps each new rock as far as it can from the others: an even, blue-noise
+ * spread with no rows and no clumps. One clear path at least `gap` wide winds through
  * it; its center wanders smoothly (1D value noise) at most `wander` px per
  * second of travel, slow enough to follow at the ship's speed.
  */
@@ -37,7 +37,7 @@ export interface RockSegment {
   rate: number
   /** Relative odds of small / medium / large. */
   sizes: Record<RockSize, number>
-  /** Clear path width, base px. */
+  /** Clear path width, base px (the ship is about 60 wide). */
   gap: number
   /** Fastest the clear path drifts sideways, base px per second. */
   wander: number
@@ -131,12 +131,12 @@ const stage2: StageConfig = {
   duration: 180,
   mission: '穿越小行星帶',
   rocks: [
-    { from: 1,   to: 36,  rate: 3.0, sizes: { small: 5, medium: 4, large: 1 }, gap: 200, wander: 45 },
-    { from: 36,  to: 90,  rate: 4.0, sizes: { small: 3, medium: 4, large: 2 }, gap: 185, wander: 60 },
-    { from: 90,  to: 108, rate: 2.4, sizes: { small: 5, medium: 3, large: 0 }, gap: 200, wander: 40 },
-    { from: 108, to: 126, rate: 3.0, sizes: { small: 1, medium: 3, large: 4 }, gap: 185, wander: 50 },
-    { from: 126, to: 162, rate: 4.6, sizes: { small: 3, medium: 4, large: 2 }, gap: 175, wander: 65 },
-    { from: 162, to: 176, rate: 2.2, sizes: { small: 5, medium: 2, large: 0 }, gap: 200, wander: 40 },
+    { from: 1,   to: 36,  rate: 3.0, sizes: { small: 5, medium: 4, large: 1 }, gap: 160, wander: 45 },
+    { from: 36,  to: 90,  rate: 4.0, sizes: { small: 3, medium: 4, large: 2 }, gap: 145, wander: 60 },
+    { from: 90,  to: 108, rate: 2.4, sizes: { small: 5, medium: 3, large: 0 }, gap: 165, wander: 40 },
+    { from: 108, to: 126, rate: 3.0, sizes: { small: 1, medium: 3, large: 4 }, gap: 150, wander: 50 },
+    { from: 126, to: 162, rate: 4.6, sizes: { small: 3, medium: 4, large: 2 }, gap: 140, wander: 65 },
+    { from: 162, to: 176, rate: 2.2, sizes: { small: 5, medium: 2, large: 0 }, gap: 165, wander: 40 },
   ],
   waves: [
     w(3, 'drone', 1, 'center'),

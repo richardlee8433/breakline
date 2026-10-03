@@ -41,6 +41,7 @@ export interface StageReport {
   emps: number
   disabled: number       // pursuers knocked out by EMPs
   shaken: number         // of those, left behind for good
+  wrecked: number        // pursuers lost to rocks
   stillPct: number       // share of the stage spent not moving
 }
 

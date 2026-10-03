@@ -89,7 +89,7 @@ export class GameApp {
   private empHeld = true       // edge detection: one press, one pulse
   private hudAcc = 0
   private lastCoreKey = ''
-  private stats = { disabled: 0, shaken: 0, still: 0, hits: freshHits() }
+  private stats = { disabled: 0, shaken: 0, wrecked: 0, still: 0, hits: freshHits() }
   // Radio lines already used this run (each plays once).
   private said = new Set<string>()
   private hintTimer = 0
@@ -246,7 +246,7 @@ export class GameApp {
     this.finaleOn = false
     this.jumpG.clear()
     this.empHeld = true
-    this.stats = { disabled: 0, shaken: 0, still: 0, hits: freshHits() }
+    this.stats = { disabled: 0, shaken: 0, wrecked: 0, still: 0, hits: freshHits() }
     const s = gameStore.getState()
     s.markStageStart()
     s.setReport(null)
@@ -307,6 +307,7 @@ export class GameApp {
       this.missiles.update(dt, W, H)
       this.waves.update(dt, this.hostile, this.player.x, this.player.y)
       this.hazards.update(dt, this.player, this.explosions)
+      this.hazards.steerPursuers(this.waves.enemies, dt, this.onWreck)
       if (this.deathTimer <= 0) {
         if (gameStore.getState().lives > 0) {
           this.player.respawn()
@@ -350,6 +351,7 @@ export class GameApp {
     })
     this.collision.check(this.missiles, this.waves.enemies, this.player)
     this.hazards.update(dt, this.player, this.explosions)
+    this.stats.wrecked += this.hazards.steerPursuers(this.waves.enemies, dt, this.onWreck)
     if (this.player.lastHit) this.onHit(this.player.lastHit)
 
     this.field.update(dt, this.player.x, this.player.y, !this.player.isDead)
@@ -367,6 +369,13 @@ export class GameApp {
       gameStore.getState().setHint(null)
       gameStore.getState().playTalk('tut-mine')
     }
+  }
+
+  /** A pursuer hit a rock (usually drifting dark after an EMP). */
+  private onWreck = (x: number, y: number) => {
+    this.explosions.spawn(x, y, 1.8)
+    audioSystem.playExplosion('small')
+    this.floats.spawn(x, y - 20 * SPRITE_SCALE, 'WRECKED', 0xffb070)
   }
 
   /** Guided missiles turn toward the ship at a limited rate and burn out
@@ -527,6 +536,7 @@ export class GameApp {
       emps: t.emps,
       disabled: this.stats.disabled,
       shaken: this.stats.shaken,
+      wrecked: this.stats.wrecked,
       stillPct: this.elapsed > 0 ? Math.round((this.stats.still / this.elapsed) * 100) : 0,
     })
   }
@@ -563,6 +573,8 @@ export class GameApp {
       { key: 'ready', who: 'rosa', text: IS_TOUCH ? 'EMP 充滿了。追兵靠近時按 EMP。' : 'EMP 充滿了。追兵靠近時按 E 或 Space。',
         tone: 'info', seconds: 4, when: () => this.core.empReady },
       { key: 'shaken', who: 'kai', text: '甩掉一架。', tone: 'info', seconds: 2.5, when: () => this.stats.shaken > 0 },
+      { key: 'wrecked', who: 'rosa', text: '熄火的追兵閃不開岩塊，撞毀了。', tone: 'info', seconds: 4,
+        when: () => this.stats.wrecked > 0 },
       { key: 'jump-half', who: 'mira', text: '跳躍充能過半了，再撐兩分鐘。', tone: 'info', seconds: 3.5,
         when: () => !!this.cfg.jump && this.elapsed >= this.duration / 2 },
       { key: 'finale', who: 'thorne', text: '全隊，最後攔截。不准讓他們跳走。', tone: 'warn', seconds: 4, urgent: true,

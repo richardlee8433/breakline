@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 import { ROCK, MINE, RockSize } from '../data/chase'
 import { StageConfig, RockSegment, MineWave } from '../data/stages'
 import { Player } from '../entities/Player'
+import { Enemy } from '../entities/Enemy'
 import { ExplosionPool } from '../fx/Explosion'
 import { loadTexture } from '../../assets/AssetLoader'
 import { audioSystem } from './AudioSystem'
@@ -20,8 +21,12 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a)
 const PATH_STEP = 1.2
 /** Extra clearance kept between any two rocks (blue-noise spacing). */
 const ROCK_SPACING = 6 * K
-/** Placement attempts per arriving rock before it is dropped. */
-const TRIES = 8
+/** Candidate spots tried per arriving rock (best-candidate sampling). */
+const CANDIDATES = 12
+/** Pursuers start sidestepping a rock this far before it reaches them. */
+const AVOID_AHEAD = 240 * K
+/** Clearance pursuers try to keep from a rock's edge. */
+const AVOID_MARGIN = 14 * K
 /** Every rock's center starts on this line, whatever its size, so that
  *  entry time maps to height the same way for all of them (the spacing and
  *  clear-path checks rely on it). */
@@ -170,18 +175,21 @@ export class HazardSystem {
     }
     const seg = this.segs.find((s) => t >= s.from && t < s.to)
     if (!seg) { this.nextArrival = Math.max(this.nextArrival, t); return }
-    // Poisson arrivals: exponential gaps between rocks, so there is no beat
-    // to read and no rows.
+    // Jittered arrivals: the average gap with ±40% play. Random enough that
+    // there is no beat to read, but without the bursts and droughts that
+    // fully random (Poisson) timing produces.
     while (this.nextArrival <= t) {
       this.placeRock(seg, this.nextArrival + ROCK.preview)
-      this.nextArrival += -Math.log(1 - Math.random()) / seg.rate
+      this.nextArrival += rand(0.6, 1.4) / seg.rate
     }
     while (this.placed.length && this.placed[0].at < t - 1) this.placed.shift()
   }
 
-  /** Dart-throwing placement: a random x, kept off the clear path for the
-   *  rock's whole height and at least ROCK_SPACING from every other rock.
-   *  A rock that finds no spot in a few tries is dropped. */
+  /** Best-candidate placement (Mitchell's algorithm): try several random
+   *  spots and keep the one farthest from every rock already placed, so the
+   *  field fills evenly instead of clumping. Spots on the clear path (over
+   *  the rock's whole height) or closer than ROCK_SPACING to another rock
+   *  never qualify; if none does, the rock is dropped. */
   private placeRock(seg: RockSegment, at: number) {
     const total = SIZES.reduce((n, s) => n + seg.sizes[s], 0)
     let pick = Math.random() * total
@@ -189,22 +197,110 @@ export class HazardSystem {
     const r = (ROCK.sizes[size].dia * K) / 2
     const half = (seg.gap * K) / 2
     const span = r / ROCK_V   // entry-time extent of the rock's height
-    for (let i = 0; i < TRIES; i++) {
+    const pa = this.pathAt(at - span), pb = this.pathAt(at), pc = this.pathAt(at + span)
+    let best = -1, bestX = 0
+    for (let i = 0; i < CANDIDATES; i++) {
       const x = rand(PLAYFIELD_LEFT + r * 0.3, PLAYFIELD_RIGHT - r * 0.3)
-      if (Math.abs(x - this.pathAt(at - span)) < half + r ||
-          Math.abs(x - this.pathAt(at)) < half + r ||
-          Math.abs(x - this.pathAt(at + span)) < half + r) continue
-      let clear = true
+      if (Math.abs(x - pa) < half + r || Math.abs(x - pb) < half + r || Math.abs(x - pc) < half + r) continue
+      let gap = Infinity
       for (const o of this.placed) {
-        const dx = o.x - x, dy = (o.at - at) * ROCK_V, min = o.r + r + ROCK_SPACING
-        if (dx * dx + dy * dy < min * min) { clear = false; break }
+        const dx = o.x - x, dy = (o.at - at) * ROCK_V
+        gap = Math.min(gap, Math.sqrt(dx * dx + dy * dy) - o.r - r)
       }
-      if (!clear) continue
-      this.placed.push({ at, x, r })
-      this.pending.push({ at, mine: false, x, size, preview: ROCK.preview })
-      this.pending.sort((a, b) => a.at - b.at)
-      return
+      if (gap < ROCK_SPACING) continue
+      if (gap > best) { best = gap; bestX = x }
     }
+    if (best < 0) return
+    this.placed.push({ at, x: bestX, r })
+    this.pending.push({ at, mine: false, x: bestX, size, preview: ROCK.preview })
+    this.pending.sort((a, b) => a.at - b.at)
+  }
+
+  /**
+   * Pursuers fly the same field. A running one picks the most urgent rock
+   * or mine coming down at it and sidesteps to whichever side is open
+   * (moving its station with it), dropping back while a head-on rock goes
+   * by; if it still ends up too close it slides off the rock's edge, so a
+   * pursuer under power never flies through or into one. A dark one (EMP)
+   * has no thrust to dodge with: a rock on screen wrecks it. Mines don't go
+   * off for pursuers (design v0.2 §8, no chains). Returns how many were
+   * wrecked.
+   */
+  steerPursuers(enemies: Enemy[], dt: number, onWreck: (x: number, y: number) => void): number {
+    let wrecked = 0
+    const nR = this.rocks.length, n = nR + this.mines.length
+    for (const e of enemies) {
+      if (!e.active || e.state === 'warn') continue
+      const steer = e.state === 'chase' || e.state === 'leave'
+      const shipR = e.halfW / 0.6   // half the drawn width
+      const onScreen = e.sprite.y + e.sprite.height / 2 < STAGE_H
+      let urgency = 0, tdx = 0, tx = 0, tclear = 0
+      for (let i = 0; i < n; i++) {
+        const isRock = i < nR
+        const o = isRock ? this.rocks[i] : this.mines[i - nR]
+        if (!o.active || (!isRock && (o as Mine).state === 'blast')) continue
+        const dx = e.sprite.x - o.sprite.x, dy = e.sprite.y - o.sprite.y
+        if (!steer) {
+          const hitR = isRock ? (o as Rock).r + e.halfW : 0
+          if (onScreen && dx * dx + dy * dy < hitR * hitR) { urgency = -1; break }
+          continue
+        }
+        // Solid to a pursuer under power: slide out along the line between
+        // the centers (its station moves too, so it doesn't push back in).
+        const minD = this.bodyR(i) + shipR * 0.7
+        const d2 = dx * dx + dy * dy
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2) || 1
+          const push = minD - d
+          e.nudge(d2 > 0 ? (dx / d) * push : push)
+          e.sprite.y += d2 > 0 ? (dy / d) * push : 0
+        }
+        const clear = this.bodyR(i) + shipR + AVOID_MARGIN
+        if (dy < -clear || dy > clear + AVOID_AHEAD || Math.abs(dx) >= clear) continue
+        const u = 1 - Math.max(0, dy - clear) / AVOID_AHEAD
+        if (u > urgency) { urgency = u; tdx = dx; tx = o.sprite.x; tclear = clear }
+      }
+      if (urgency < 0) {
+        onWreck(e.sprite.x, e.sprite.y)
+        e.deactivate()
+        wrecked++
+        continue
+      }
+      if (urgency <= 0) continue
+      // Away from the rock by default; the other way if that side is a wall
+      // or another hazard and the other side isn't.
+      let dir = tdx !== 0 ? Math.sign(tdx) : (e.sprite.x < (PLAYFIELD_LEFT + PLAYFIELD_RIGHT) / 2 ? 1 : -1)
+      const bad = (d: number) => {
+        const x = tx + d * tclear
+        return x - shipR < PLAYFIELD_LEFT || x + shipR > PLAYFIELD_RIGHT || this.occupied(x, e.sprite.y, shipR)
+      }
+      if (bad(dir) && !bad(-dir)) dir = -dir
+      const maxStep = e.def.speed * K * 2 * dt
+      e.nudge(Math.max(-maxStep, Math.min(maxStep, (dir * tclear - tdx) * urgency)))
+      // Head-on and close (typically a pursuer climbing in from the bottom
+      // edge into a falling rock): give way while the sidestep opens up.
+      if (urgency > 0.4 && Math.abs(tdx) < tclear * 0.8) e.sprite.y += ROCK_V * urgency * dt
+    }
+    return wrecked
+  }
+
+  /** Drawn radius of rock i, or of mine i − rocks.length. */
+  private bodyR(i: number): number {
+    return i < this.rocks.length ? this.rocks[i].r / (ROCK.hitFrac * 2) : MINE_R
+  }
+
+  /** Is there a rock or mine around (x, y), now or coming down onto it
+   *  soon, within reach of a ship of radius r? */
+  private occupied(x: number, y: number, r: number): boolean {
+    const nR = this.rocks.length
+    for (let i = 0; i < nR + this.mines.length; i++) {
+      const o = i < nR ? this.rocks[i] : this.mines[i - nR]
+      if (!o.active) continue
+      const reach = this.bodyR(i) + r + AVOID_MARGIN
+      const dy = y - o.sprite.y
+      if (Math.abs(x - o.sprite.x) < reach && dy > -reach && dy < reach + AVOID_AHEAD * 0.6) return true
+    }
+    return false
   }
 
   /** The clear path's center for a given entry time: random control
