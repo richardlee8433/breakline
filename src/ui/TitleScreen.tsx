@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
+import type { GameMode } from '../game/data/stages'
 import { SettingsPanel } from './SettingsPanel'
 
 export function TitleScreen() {
@@ -17,18 +18,19 @@ export function TitleScreen() {
         return
       }
       if (e.code === 'KeyO') { setSettings(true); return }
-      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun(true)
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun('story', true)
+      if (e.code === 'Digit2') startRun('arena', true)
       // The A/B control build for playtests (game plan §14): same arena,
       // core switched off.
-      if (e.code === 'Digit2') startRun(false)
+      if (e.code === 'Digit3') startRun('arena', false)
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
   }, [startRun, settings])
 
-  const option = (core: boolean, text: string, hint: string, primary: boolean) => (
+  const option = (mode: GameMode, core: boolean, text: string, hint: string, primary: boolean) => (
     <button
-      onPointerDown={(e) => { e.stopPropagation(); startRun(core) }}
+      onPointerDown={(e) => { e.stopPropagation(); startRun(mode, core) }}
       style={{
         display: 'block', width: 360, margin: '0 auto', padding: '12px 0',
         fontFamily: 'monospace', letterSpacing: 3, cursor: 'pointer',
@@ -61,13 +63,14 @@ export function TitleScreen() {
       <div style={{ fontSize: 15, color: '#aaaacc', marginTop: 8, letterSpacing: 3 }}>
         COMBAT PROTOTYPE
       </div>
-      <div style={{ marginTop: 30, fontSize: 13, color: '#888' }}>
+      <div style={{ marginTop: 22, fontSize: 13, color: '#888' }}>
         HI-SCORE  {String(hiScore).padStart(6, '0')}
       </div>
 
-      <div style={{ marginTop: 30, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {option(true, 'START', 'TAP · SPACE · 1', true)}
-        {option(false, 'CONTROL RUN (NO CORE)', 'PLAYTEST A/B · PRESS 2', false)}
+      <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {option('story', true, 'STORY', '3 STAGES · TAP · SPACE · 1', true)}
+        {option('arena', true, 'ARENA', 'PHASE 1 COMBAT TEST · PRESS 2', false)}
+        {option('arena', false, 'CONTROL RUN (NO CORE)', 'PLAYTEST A/B · PRESS 3', false)}
         <button
           // Open on click (after release), not pointerdown: on touch, the click
           // that follows the tap would otherwise land on the panel's DONE
@@ -84,7 +87,7 @@ export function TitleScreen() {
         </button>
       </div>
 
-      <div style={{ marginTop: 36, fontSize: 13, color: '#778', lineHeight: 1.9, textAlign: 'center' }}>
+      <div style={{ marginTop: 24, fontSize: 13, color: '#778', lineHeight: 1.9, textAlign: 'center' }}>
         MOVE: ARROW KEYS / WASD &nbsp;·&nbsp; FIRE: AUTO<br />
         <span style={{ color: '#33eeff' }}>ABSORB: SHIFT</span> &nbsp;·&nbsp;
         DASH: SPACE &nbsp;·&nbsp; COUNTER: E<br />

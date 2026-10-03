@@ -7,8 +7,10 @@ Lastlight 同宇宙的短篇縱向卷軸射擊冒險。核心玩法：**吸收 �
 - 完整設計：[`docs/Breakline_Game_Plan_v0.1.txt`](docs/Breakline_Game_Plan_v0.1.txt)。名稱、數值、劇情都是暫定。
 - 程式碼從 [neon-raiden](https://github.com/richardlee8433/neon-raiden) fork 出來，渲染、物件池、波次、Boss、音訊都沿用它的基礎。
 - **目前狀態：Phase 1 戰鬥原型已完成，等待試玩驗證。**
-  - 遊戲只跑一個約 70 秒的測試場地（`STAGES = [arena]`）。
-  - neon-raiden 的三關留在 `LEGACY_STAGES`，供 Phase 2–3 參考。
+  - 兩種模式（`mode`）：
+    - **story**：三關故事模式，每關前播對話（`STORY_STAGES`），打完播結局。
+    - **arena**：約 70 秒的戰鬥測試場地（`ARENA`）。
+  - 兩種模式都透過 `stageConfig(mode, stage)` 取得關卡設定。
   - 已移除的系統：BURST、炸彈、VIVERSE 排行榜、Laser / Plasma、武器等級、focus。
   - 保留下來給街機模式用的：graze、chain、無限循環。
 
@@ -35,7 +37,8 @@ src/
       core.ts             # 吸收 / 能源 / 熱量 / 衝刺 / 反擊的所有數值
       player.ts           # 移動速度、自動射擊、重生
       enemies.ts          # 敵機屬性表（含 bulletKind: energy | missile）
-      stages.ts           # arena + LEGACY_STAGES
+      stages.ts           # ARENA、STORY_STAGES、stageConfig()
+      story.ts            # 故事模式台詞與角色（全部暫定）
       audio.ts            # 音效清單
     entities/             # Player（含衝刺）, Enemy（HostilePools）, Boss, BulletPool, Pickup, Gem
     systems/
@@ -92,9 +95,28 @@ docs/                     # 設計文件
 
 `InputSystem` 對外只輸出統一的 `Actions`，不讓外部直接讀 keyCode。觸控按鈕用 `tapKey()` 走同一條 key path。
 
+## 故事模式流程
+
+```
+title → story(stage1) → playing → [Boss 擊破] stageclear → (2.5s, ticker 計時)
+      → story(stage2) → playing → … → story(ending) → complete
+gameover → RETRY STAGE → playing（同一關，不重播對話）
+```
+
+- **store**：
+  - `startRun(mode, core)`、`playScene(id)`、`finishScene()`、`retryStage()`。
+  - `phase === 'story'` 時，GameApp 不 tick 戰鬥。
+- **GameApp**：
+  - 任何從非 playing 進入 playing 的轉換都會呼叫 `startStage`。
+  - 進入 story 時呼叫 `enterStory()`，負責清場並換上下一關的背景。
+- **對話 UI**：`ui/StoryDialog.tsx`，移植自 Lastlight 的 `Dialog.tsx` 和 `.dlg` CSS，尺寸乘上 `--k`（= SPRITE_SCALE）。
+- **立繪**：`src/art/portraits.ts`，移植自 Lastlight 的像素立繪引擎，角色是 Breakline 的。有手繪圖時逐一替換。
+- **試玩數據**：故事模式三關累計。從標題開始新的一局時才重置。
+
 ## 試玩支援（規劃書第十四節）
 
-- 標題畫面按 1 或 Space 開始核心模式；按 2 是對照組（`coreEnabled = false`，同一個場地）。
+- 標題畫面按 1 或 Space 進故事模式，按 2 進 ARENA。
+- 按 3 是對照組（ARENA 加上 `coreEnabled = false`）。
 - 每局結束時，`GameApp.finishRun()` 產生 `RunReport`，結算畫面會顯示，並可複製成 JSON。
 - 教學提示是非阻擋式的 banner，每局各觸發一次。觸發點在 `GameApp.trackRun()`。
 
@@ -117,7 +139,6 @@ headless Chromium 沒有 GPU，FPS 量不準。比較可靠的方法是：
 
 ## Known debt
 
-- `GameApp.handleStageClear` 用 `setTimeout` 做關卡過場（目前只有 legacy Boss 流程會走到），應改成 ticker 計時。
 - 規劃書要求「首次教學在安全區暫停或減速」，目前只有非阻擋式提示。
 - 音效是從現有素材挑的，還沒實際聽過調整：吸收用 `graze-alt` / `gem-alt`，反擊用 `bigshot3`，過熱用 `alarm1`，衝刺用 `smallshot5`。
 - `public/assets` 裡還留著 neon-raiden 沒在用的素材：炸彈、power、laser、plasma 的 pickup 圖和音效。

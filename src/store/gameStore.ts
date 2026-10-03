@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { STAGES } from '../game/data/stages'
+import type { GameMode } from '../game/data/stages'
+import type { SceneId } from '../game/data/story'
 
 /** Chain length → score multiplier tier. */
 export function chainMult(chain: number): number {
@@ -57,7 +58,11 @@ interface GameState {
   loop: number   // playthrough number; enemies get faster each loop
   lives: number
   stage: number
-  phase: 'title' | 'playing' | 'stageclear' | 'advancing' | 'gameover' | 'complete'
+  /** title → (story ↔ playing → stageclear)… → complete | gameover */
+  phase: 'title' | 'story' | 'playing' | 'stageclear' | 'gameover' | 'complete'
+  mode: GameMode
+  /** The dialog playing while phase is 'story'. */
+  storyScene: SceneId | null
   bossHp: number
   bossMaxHp: number
   bossActive: boolean
@@ -83,11 +88,16 @@ interface GameState {
   setCore: (c: CoreView) => void
   setHint: (h: Hint | null) => void
   setReport: (r: RunReport | null) => void
-  startRun: (coreEnabled: boolean) => void
+  startRun: (mode: GameMode, coreEnabled: boolean) => void
+  /** Play a story scene (pauses combat until it finishes). */
+  playScene: (scene: SceneId) => void
+  /** The current scene ended or was skipped. */
+  finishScene: () => void
+  /** Story mode game over: replay the same stage, no dialog (plan §9). */
+  retryStage: () => void
   setBossHp: (hp: number, max: number) => void
   setBossActive: (v: boolean) => void
   setBossWarning: (v: boolean) => void
-  advanceStage: () => void
   toggleSound: () => void
   setMusicVolume: (v: number) => void
   setSfxVolume: (v: number) => void
@@ -97,7 +107,8 @@ interface GameState {
 const freshPlay = {
   score: 0, graze: 0, chain: 0, loop: 1,
   lives: 3,
-  stage: 1, phase: 'playing' as const,
+  stage: 1, phase: 'playing' as GameState['phase'],
+  storyScene: null as SceneId | null,
   bossHp: 0, bossMaxHp: 1, bossActive: false, bossWarning: false,
   paused: false,
   core: freshCore,
@@ -162,6 +173,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   musicVolume: loadVolume(MUSIC_VOL_KEY),
   sfxVolume: loadVolume(SFX_VOL_KEY),
   coreEnabled: true,
+  mode: 'arena' as GameMode,
 
   addScore: (n) => set((s) => {
     const score = s.score + n
@@ -203,25 +215,31 @@ export const useGameStore = create<GameState>((set, get) => ({
   setCore: (core) => set({ core }),
   setHint: (hint) => set({ hint }),
   setReport: (report) => set({ report }),
-  startRun: (coreEnabled) => set((s) => ({
+  startRun: (mode, coreEnabled) => set((s) => ({
     ...freshPlay,
     hiScore: s.hiScore,
     soundEnabled: s.soundEnabled,
     coreEnabled,
+    mode,
+    // Story opens on stage 1's briefing; the arena drops straight into play.
+    ...(mode === 'story' ? { phase: 'story' as const, storyScene: 'stage1' as const } : {}),
   })),
+  playScene: (scene) => set({ phase: 'story', storyScene: scene, paused: false, bossActive: false, bossWarning: false }),
+  finishScene: () => set((s) => {
+    if (s.phase !== 'story') return {}
+    if (s.storyScene === 'ending') {
+      saveHiScore(s.hiScore)
+      return { phase: 'complete', storyScene: null }
+    }
+    return { phase: 'playing', storyScene: null }
+  }),
+  retryStage: () => set({
+    lives: freshPlay.lives, chain: 0, phase: 'playing', paused: false,
+    bossActive: false, bossWarning: false, report: null,
+  }),
   setBossHp: (hp, max) => set({ bossHp: hp, bossMaxHp: max }),
   setBossActive: (v) => set({ bossActive: v }),
   setBossWarning: (v) => set({ bossWarning: v }),
-  advanceStage: () => set((s) => {
-    // past the last stage: wrap into the next loop (harder playthrough)
-    const wrap = s.stage >= STAGES.length
-    return {
-      stage: wrap ? 1 : s.stage + 1,
-      loop: wrap ? s.loop + 1 : s.loop,
-      phase: 'advancing',
-      bossActive: false,
-    }
-  }),
   setMusicVolume: (v) => {
     const musicVolume = Math.min(1, Math.max(0, v))
     saveVolume(MUSIC_VOL_KEY, musicVolume)

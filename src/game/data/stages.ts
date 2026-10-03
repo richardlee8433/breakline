@@ -150,9 +150,6 @@ const stage3: StageConfig = {
   },
 }
 
-/** neon-raiden's three stages, kept as reference material for Phase 2–3. */
-export const LEGACY_STAGES: StageConfig[] = [stage1, stage2, stage3]
-
 // Phase 1 combat arena: introduce each rule alone, then mix them.
 // Energy drones first (absorb), missiles alone (the contrast), then both.
 const arena: StageConfig = {
@@ -179,4 +176,31 @@ const arena: StageConfig = {
   ],
 }
 
-export const STAGES: StageConfig[] = [arena]
+export const ARENA: StageConfig = arena
+
+// ── Story mode: three stages, each ending in a boss (game plan §8) ─────────
+// Stage 1 is the arena's teaching order capped by the interceptor boss.
+// Stages 2–3 reuse neon-raiden's stage 2–3 waves, with missile interceptors
+// threaded in so the absorb/dodge choice stays live after the tutorial.
+// Bosses reuse neon-raiden's art until part-based bosses exist (Phase 2):
+// 1 Helion interceptor, 2 ancient guardian, 3 Helion blockade flagship.
+const missiles = (times: number[], count = 1): WaveEntry[] =>
+  times.map((time, i) => ({
+    time, type: 'missileer', count,
+    formation: i % 2 ? 'split' : 'line-top', path: 'hover',
+  }))
+const byTime = (waves: WaveEntry[]) => [...waves].sort((a, b) => a.time - b.time)
+
+export const STORY_STAGES: StageConfig[] = [
+  { ...arena, id: 1, endTime: 64, boss: stage1.boss },
+  { ...stage2, densityMult: 1.2, waves: byTime([...stage2.waves, ...missiles([6, 20, 36])]) },
+  { ...stage3, densityMult: 1.2, waves: byTime([...stage3.waves, ...missiles([5, 17, 30, 40], 2)]) },
+]
+
+export type GameMode = 'story' | 'arena'
+
+/** The stage config a mode runs at a given (1-based) stage number. */
+export function stageConfig(mode: GameMode, stage: number): StageConfig {
+  if (mode === 'arena') return ARENA
+  return STORY_STAGES[Math.min(Math.max(stage, 1), STORY_STAGES.length) - 1]
+}

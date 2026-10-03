@@ -2,7 +2,12 @@
 
 Lastlight 同宇宙的短篇縱向卷軸射擊冒險。你駕駛一架裝上古文明核心的拼裝戰機：接住敵方的能源砲火，轉成自己的反擊武器，替撤離船打開 Helion 的封鎖線。
 
-> **狀態：Phase 1 戰鬥原型。** 可以玩一場約 70 秒的測試場地，內容包括吸收、衝刺、反擊、能源與熱量，以及兩種敵機和兩種子彈。另有關閉核心的對照組可做 A/B 測試。設計文件見 [`docs/Breakline_Game_Plan_v0.1.txt`](docs/Breakline_Game_Plan_v0.1.txt)。
+> **狀態：Phase 1 戰鬥原型＋故事模式草稿。** 有三種玩法：
+> - **STORY**：三關故事模式，每關開始前有劇情對話，打完三關播結局。
+> - **ARENA**：約 70 秒的戰鬥測試場地。
+> - **CONTROL RUN**：關閉核心的對照組，用於 A/B 測試。
+>
+> 角色、台詞、地名都是暫定。設計文件見 [`docs/Breakline_Game_Plan_v0.1.txt`](docs/Breakline_Game_Plan_v0.1.txt)。
 
 ## Run Locally
 
@@ -39,9 +44,32 @@ npm run dev
 
 所有數值都在 [`src/game/data/core.ts`](src/game/data/core.ts)。
 
+## 故事模式
+
+標題畫面選 **STORY**（按 1 或 Space）。
+
+- **對話**：每關開始前播一段簡報。對話框沿用 Lastlight 的樣式：像素半身立繪、名牌、逐字打字。
+  - Space、Enter 或點擊：先把這句打完，再按一次翻下一句。
+  - 「跳過」或 Esc：跳過整段對話。
+- **失敗**：game over 時可以選 **RETRY STAGE** 重打當關，不會重播簡報。
+
+| 關卡 | 內容 | Boss（暫用 neon-raiden 的圖） |
+|---|---|---|
+| 1 · 突破巡邏線 | 無人機吸收教學 → 飛彈對比 → 混合 | Helion 攔截艦 |
+| 2 · 遺跡捷徑 | 原第二關敵群＋飛彈攔截機 | 古文明守衛 |
+| 3 · 打開封鎖線 | 原第三關敵群＋飛彈攔截機 | Helion 封鎖旗艦 |
+
+暫定角色：
+- **凱**：飛行員。
+- **蘿莎**：工程師。
+- **諾娃博士**：研究員。
+- **哈爾特司令**：Helion 封鎖艦隊指揮官。
+
+立繪是用 Lastlight 的像素立繪產生器畫的暫代圖（`src/art/portraits.ts`），台詞在 `src/game/data/story.ts`。
+
 ## 試玩測試（規劃書第十四節）
 
-標題畫面有兩個選項：**START**（核心開啟）和 **CONTROL RUN**（核心關閉，按 2）。兩者用同一個場地，可以讓受測者交替順序各玩一次。
+標題畫面的 **ARENA**（按 2）和 **CONTROL RUN**（核心關閉，按 3）用同一個場地，可以讓受測者交替順序各玩一次。
 
 每局結束後，畫面會顯示測試報告，**COPY RESULT** 可以把報告複製成 JSON。報告包含：
 
@@ -57,7 +85,7 @@ npm run dev
 
 - Pixi.js v8 渲染、bloom 後處理、landscape 中央 combat corridor 版面
 - 子彈、敵機、爆炸、gem、pickup、浮動文字的物件池
-- 資料化的波次系統、3 階段 Boss（原本三關留在 `LEGACY_STAGES`，供 Phase 2–3 參考）
+- 資料化的波次系統、3 階段 Boss（故事模式第二、三關沿用原本的關卡，並加入飛彈攔截機）
 - 極座標彈幕產生器（ring / spiral / flower / aimed-fan）
 - 音效 / BGM 系統
 - Shockwave、Hitstop、ScreenShake 等打擊演出（現在用在反擊）

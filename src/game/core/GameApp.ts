@@ -24,7 +24,8 @@ import { GemPool } from '../entities/Gem'
 import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
 import { FloatingTextPool } from '../fx/FloatingText'
-import { STAGES } from '../data/stages'
+import { STORY_STAGES, stageConfig } from '../data/stages'
+import { introFor } from '../data/story'
 import { gameStore, HitCause, Hint } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 
@@ -82,6 +83,7 @@ export class GameApp {
   private fxLayer!: Container
 
   private transitioning = false
+  private clearTimer = 0       // stage-clear beat before the next briefing
   private bossCountdown = -1   // >=0: WARNING banner is up, boss enters at 0
   private chainTimer = 0       // kill-chain lapse countdown
   private lastChain = 0
@@ -183,12 +185,14 @@ export class GameApp {
 
     // Phase transitions
     gameStore.subscribe((s, prev) => {
-      if (s.phase === 'playing' && prev.phase === 'title') {
-        this.startStage(s.stage)   // startStage owns the per-stage BGM
-      }
-      if (s.phase === 'stageclear' && prev.phase !== 'stageclear') {
-        this.handleStageClear(s.stage)
-      }
+      // A new run (arena START, or story mode opening on its briefing).
+      if (prev.phase === 'title' && s.phase !== 'title') this.resetRunStats()
+      // Every way into combat — START, a finished briefing, a story retry —
+      // loads the stage. startStage owns the per-stage BGM.
+      if (s.phase === 'playing' && prev.phase !== 'playing') this.startStage(s.stage)
+      if (s.phase === 'story' && prev.phase !== 'story') this.enterStory()
+      if (s.phase === 'stageclear' && prev.phase !== 'stageclear') this.handleStageClear()
+      if (s.phase === 'complete' && prev.phase === 'story') this.finishRun(true)   // story ending
       if (s.phase === 'gameover' && s.phase !== prev.phase) musicSystem.stop()
       if (s.phase === 'complete' && s.phase !== prev.phase) musicSystem.playJingle('stage-clear')
       if (s.phase === 'title' && s.phase !== prev.phase) musicSystem.playTitle()
@@ -228,31 +232,26 @@ export class GameApp {
   }
 
   private startStage(stageNum: number) {
-    const cfg = STAGES[stageNum - 1] ?? STAGES[0]
-    musicSystem.playStage(stageNum)
+    const { mode } = gameStore.getState()
+    const cfg = stageConfig(mode, stageNum)
+    musicSystem.playStage(cfg.id)
     this.scroll.setTheme(cfg.bgTheme)
     this.waves.loadStage(cfg)
-    this.playerBullets.releaseAll()
-    this.enemyBullets.releaseAll()
-    this.bossBullets.releaseAll()
-    this.missiles.releaseAll()
-    this.pickups.releaseAll()
-    this.gems.releaseAll()
-    this.floats.releaseAll()
+    this.clearField()
     this.player.reset()
     this.core.reset()
     this.core.enabled = gameStore.getState().coreEnabled
     this.absorbField.clear()
     this.held.absorb = this.held.dash = this.held.counter = true
     this.syncCore(true)
-    this.run = {
-      seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0, counterKills: 0,
-      deaths: { energy: 0, missile: 0, hull: 0, beam: 0 }, deathsWhileAbsorbing: 0,
-    }
-    this.hintSeen = { counter: false, missile: false, overheat: false }
     gameStore.getState().setReport(null)
-    if (this.core.enabled) this.showHint('CYAN RINGS ARE ENERGY  ·  PRESS SHIFT TO ABSORB THEM', 'info', 6)
-    else this.showHint('CONTROL RUN  ·  CORE OFFLINE  ·  SHOOT, DODGE, SPACE TO DASH', 'info', 5)
+    // Teaching prompts belong to the first stage (story) or the arena.
+    if (mode === 'arena' || stageNum === 1) {
+      if (this.core.enabled) this.showHint('CYAN RINGS ARE ENERGY  ·  PRESS SHIFT TO ABSORB THEM', 'info', 6)
+      else this.showHint('CONTROL RUN  ·  CORE OFFLINE  ·  SHOOT, DODGE, SPACE TO DASH', 'info', 5)
+    } else {
+      gameStore.getState().setHint(null)
+    }
     gameStore.getState().resetChain()
     this.chainTimer = 0
     this.lastChain = 0
@@ -261,22 +260,62 @@ export class GameApp {
     gameStore.getState().setBossWarning(false)
   }
 
-  private handleStageClear(_stageNum: number) {
+  /** Per-run playtest metrics; cumulative across a story's three stages. */
+  private resetRunStats() {
+    this.run = {
+      seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0, counterKills: 0,
+      deaths: { energy: 0, missile: 0, hull: 0, beam: 0 }, deathsWhileAbsorbing: 0,
+    }
+    this.core.resetTally()
+    this.hintSeen = { counter: false, missile: false, overheat: false }
+  }
+
+  /** Release everything left on the field (between stages, and before a
+   *  briefing so frozen debris doesn't sit behind the dialog). */
+  private clearField() {
+    this.playerBullets.releaseAll()
+    this.enemyBullets.releaseAll()
+    this.bossBullets.releaseAll()
+    this.missiles.releaseAll()
+    this.pickups.releaseAll()
+    this.gems.releaseAll()
+    this.floats.releaseAll()
+    this.absorbField.clear()
+    this.bulletTrail.update(this.playerBullets)   // redraw with no shots = clear the trails
+  }
+
+  /** A briefing (or the ending) is starting: tidy the field and show the
+   *  upcoming stage's backdrop behind the dialog. */
+  private enterStory() {
+    const s = gameStore.getState()
+    this.waves.dismissAll()
+    this.clearField()
+    this.player.reset()
+    if (s.storyScene !== 'ending') this.scroll.setTheme(stageConfig(s.mode, s.stage).bgTheme)
+    s.setHint(null)
+  }
+
+  private handleStageClear() {
     if (this.transitioning) return
     this.transitioning = true
+    this.clearTimer = 2.5
     musicSystem.playJingle('stage-clear')
+  }
 
-    // Advance to the next stage — advanceStage wraps past the last stage
-    // into the next loop, where enemies come back faster and meaner.
-    setTimeout(() => {
-      gameStore.getState().advanceStage()   // phase → 'advancing'
-    }, 2000)
-
-    setTimeout(() => {
-      const s = gameStore.getState()
-      this.startStage(s.stage)
-      gameStore.setState({ phase: 'playing' })
-    }, 4500)
+  /** After the STAGE CLEAR beat: next stage's briefing, or the ending. */
+  private afterStageClear() {
+    const s = gameStore.getState()
+    if (s.mode !== 'story') {
+      this.finishRun(true)
+      s.setPhase('complete')
+      return
+    }
+    if (s.stage < STORY_STAGES.length) {
+      gameStore.setState({ stage: s.stage + 1 })
+      s.playScene(introFor(s.stage + 1))
+    } else {
+      s.playScene('ending')
+    }
   }
 
   private tick(dt: number) {
@@ -285,6 +324,10 @@ export class GameApp {
     const phase = state.phase
     screenShake.update(dt, this.app.stage)
     this.scroll.update(dt)
+    if (phase === 'stageclear' && this.clearTimer > 0) {
+      this.clearTimer -= dt
+      if (this.clearTimer <= 0) this.afterStageClear()
+    }
     if (phase !== 'playing') return
     if (hitstop.update(dt)) return   // impact freeze-frame
 
@@ -336,15 +379,16 @@ export class GameApp {
       this.missiles.releaseAll()
       // Warm the browser cache during the siren — boss art runs to a few
       // hundred KB, and spawn() fetches it at the instant it must appear.
-      const sprite = (STAGES[gameStore.getState().stage - 1] ?? STAGES[0]).boss?.shipSprite
+      const { mode, stage } = gameStore.getState()
+      const sprite = stageConfig(mode, stage).boss?.shipSprite
       if (sprite) new Image().src = sprite
     }
     if (this.bossCountdown >= 0) {
       this.bossCountdown -= dt
       if (this.bossCountdown < 0 && !this.boss.active) {
         gameStore.getState().setBossWarning(false)
-        const { stage, loop } = gameStore.getState()
-        const base = (STAGES[stage - 1] ?? STAGES[0]).boss
+        const { stage, loop, mode } = gameStore.getState()
+        const base = stageConfig(mode, stage).boss
         // Loop rank: later playthroughs field tougher, faster bosses
         const rank = Math.min(loop - 1, 4)
         if (base) {

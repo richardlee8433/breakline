@@ -4,7 +4,10 @@ import { useGameStore, RunReport } from '../store/gameStore'
 /** End-of-run screen: a game over, or `cleared` when the arena was survived.
  *  Shows the playtest report so a facilitator can note it after each run. */
 export function GameOverScreen({ cleared = false }: { cleared?: boolean }) {
-  const { score, hiScore, setPhase, report } = useGameStore()
+  const { score, hiScore, setPhase, report, mode, stage, retryStage } = useGameStore()
+  // Story: a loss restarts the same stage without its briefing (plan §9).
+  const canRetryStage = mode === 'story' && !cleared
+  const retry = canRetryStage ? retryStage : () => setPhase('title')
   const [blink, setBlink] = useState(true)
   const [copied, setCopied] = useState(false)
 
@@ -13,11 +16,11 @@ export function GameOverScreen({ cleared = false }: { cleared?: boolean }) {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target?.tagName === 'BUTTON') return
-      if (e.code === 'Enter') setPhase('title')
+      if (e.code === 'Enter') retry()
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
-  }, [setPhase])
+  })
 
   const copy = async () => {
     if (!report) return
@@ -39,7 +42,7 @@ export function GameOverScreen({ cleared = false }: { cleared?: boolean }) {
         color: cleared ? '#44ffaa' : '#ff2233',
         textShadow: cleared ? '0 0 16px #00ff88' : '0 0 16px #ff0000',
       }}>
-        {cleared ? 'ARENA CLEAR' : 'GAME OVER'}
+        {cleared ? (mode === 'story' ? 'MISSION COMPLETE' : 'ARENA CLEAR') : 'GAME OVER'}
       </div>
 
       <div style={{ marginTop: 16, fontSize: 30, color: '#ffdd00' }}>{String(score).padStart(6, '0')}</div>
@@ -55,9 +58,12 @@ export function GameOverScreen({ cleared = false }: { cleared?: boolean }) {
             {copied ? 'COPIED' : 'COPY RESULT'}
           </button>
         )}
-        <button onClick={() => setPhase('title')} style={{ ...buttonStyle('#8888ff'), color: blink ? '#ccccff' : '#8899aa' }}>
-          RETRY [ENTER]
+        <button onClick={retry} style={{ ...buttonStyle('#8888ff'), color: blink ? '#ccccff' : '#8899aa' }}>
+          {canRetryStage ? `RETRY STAGE ${stage} [ENTER]` : cleared ? 'TITLE [ENTER]' : 'RETRY [ENTER]'}
         </button>
+        {canRetryStage && (
+          <button onClick={() => setPhase('title')} style={buttonStyle('#556677')}>TITLE</button>
+        )}
       </div>
     </div>
   )

@@ -46,6 +46,11 @@ export class CoreSystem {
     this.energy = 0; this.heat = 0; this.overheated = false
     this.window = 0; this.cooldown = 0; this.counterCd = 0; this.coolDelay = 0
     this.catchesThisWindow = 0
+  }
+
+  /** Playtest counts span a whole run, so they reset separately from the
+   *  per-stage state above. */
+  resetTally() {
     this.tally = { windows: 0, whiffs: 0, catches: 0, counters: 0, overheats: 0 }
   }
 

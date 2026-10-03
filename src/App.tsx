@@ -4,7 +4,7 @@ import { HUD } from './ui/HUD'
 import { TitleScreen } from './ui/TitleScreen'
 import { GameOverScreen } from './ui/GameOverScreen'
 import { StageClearScreen } from './ui/StageClearScreen'
-import { StageAnnouncement } from './ui/StageAnnouncement'
+import { StoryDialog } from './ui/StoryDialog'
 import { useGameStore } from './store/gameStore'
 
 import { STAGE_W as GAME_W, STAGE_H as GAME_H } from './game/config'
@@ -89,7 +89,7 @@ export default function App() {
       {phase === 'gameover'   && <GameOverScreen />}
       {phase === 'complete'   && <GameOverScreen cleared />}
       {phase === 'stageclear' && <StageClearScreen />}
-      {phase === 'advancing'  && <StageAnnouncement />}
+      {phase === 'story'      && <StoryDialog />}
       {paused && phase === 'playing' && (
         <div
           onClick={togglePause}

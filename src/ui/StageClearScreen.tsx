@@ -1,44 +1,26 @@
-import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 
+/** The beat between a boss kill and the next briefing. GameApp times it on
+ *  the ticker and moves on by itself, so there is nothing to press here. */
 export function StageClearScreen() {
-  const { score, hiScore, setPhase } = useGameStore()
-  const [blink, setBlink] = useState(true)
-
-  useEffect(() => {
-    const id = setInterval(() => setBlink((b) => !b), 500)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'Enter') setPhase('title')
-    }
-    window.addEventListener('keydown', onKey)
-    return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
-  }, [setPhase])
+  const { score, stage } = useGameStore()
 
   return (
     <div style={{
       position: 'absolute', inset: 0,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,10,0.88)',
+      background: 'rgba(0,0,10,0.7)',
       color: '#fff', fontFamily: 'monospace',
-      userSelect: 'none',
+      userSelect: 'none', pointerEvents: 'none',
     }}>
-      <div style={{ fontSize: 34, fontWeight: 'bold', color: '#00ffaa',
-        textShadow: '0 0 20px #00ffaa', letterSpacing: 4 }}>
-        STAGE  CLEAR
+      <div style={{ fontSize: 16, letterSpacing: 8, color: '#88aacc' }}>STAGE {stage}</div>
+      <div style={{ marginTop: 8, fontSize: 48, fontWeight: 'bold', color: '#00ffaa',
+        textShadow: '0 0 20px #00ffaa', letterSpacing: 6 }}>
+        CLEAR
       </div>
-      <div style={{ marginTop: 36, fontSize: 13, color: '#aaa', letterSpacing: 2 }}>SCORE</div>
-      <div style={{ fontSize: 28, color: '#ffdd00', marginTop: 6 }}>
+      <div style={{ marginTop: 26, fontSize: 30, color: '#ffdd00' }}>
         {String(score).padStart(6, '0')}
-      </div>
-      <div style={{ marginTop: 20, fontSize: 11, color: '#666', letterSpacing: 2 }}>
-        HI-SCORE  {String(hiScore).padStart(6, '0')}
-      </div>
-      <div style={{
-        marginTop: 44, fontSize: 13, letterSpacing: 3,
-        color: blink ? '#ffff88' : 'transparent',
-      }}>
-        PRESS  SPACE  TO  CONTINUE
       </div>
     </div>
   )
