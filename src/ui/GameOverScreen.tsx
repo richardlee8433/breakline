@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 
-export function GameOverScreen() {
+/** End-of-run screen: a game over, or `cleared` when the arena was survived. */
+export function GameOverScreen({ cleared = false }: { cleared?: boolean }) {
   const { score, hiScore, stage, loop, setPhase } = useGameStore()
   const [blink, setBlink] = useState(true)
 
@@ -23,14 +24,18 @@ export function GameOverScreen() {
       background: 'rgba(0,0,10,0.95)', color: '#fff', fontFamily: 'monospace',
       userSelect: 'none', padding: '30px 18px 26px', boxSizing: 'border-box',
     }}>
-      <div style={{ fontSize: 36, fontWeight: 'bold', color: '#ff2233', textShadow: '0 0 16px #ff0000', letterSpacing: 4 }}>
-        GAME OVER
+      <div style={{
+        fontSize: 36, fontWeight: 'bold', letterSpacing: 4,
+        color: cleared ? '#44ffaa' : '#ff2233',
+        textShadow: cleared ? '0 0 16px #00ff88' : '0 0 16px #ff0000',
+      }}>
+        {cleared ? 'ARENA CLEAR' : 'GAME OVER'}
       </div>
 
       <div style={{ marginTop: 18, fontSize: 12, color: '#aaa', letterSpacing: 2 }}>SCORE</div>
       <div style={{ fontSize: 27, color: '#ffdd00', marginTop: 4 }}>{String(score).padStart(6, '0')}</div>
       <div style={{ marginTop: 7, fontSize: 10, color: '#666', letterSpacing: 2 }}>
-        LOCAL BEST {String(hiScore).padStart(6, '0')} · STAGE {stage} · LOOP {loop}
+        LOCAL BEST {String(hiScore).padStart(6, '0')}{cleared ? '' : ` · STAGE ${stage} · LOOP ${loop}`}
       </div>
 
       <button

@@ -44,6 +44,11 @@ class AudioSystem {
     this.fire(SFX.shoot, 1.07)
   }
 
+  /** Heavier, lower thump than any energy cue: a missile is coming. */
+  playMissileLaunch() {
+    this.fire(SFX['missile-launch'], 0.75)
+  }
+
   playBossHurt() {
     this.fire(SFX['boss-hurt'])
   }

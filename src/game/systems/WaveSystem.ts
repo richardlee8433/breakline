@@ -1,13 +1,11 @@
 import { Container, Texture } from 'pixi.js'
 import { StageConfig, WaveEntry, EnemyPath, Formation } from '../data/stages'
 import { ENEMIES, EnemyDef } from '../data/enemies'
-import { Enemy } from '../entities/Enemy'
-import { BulletPool } from '../entities/BulletPool'
+import { Enemy, HostilePools } from '../entities/Enemy'
 import { gameStore } from '../../store/gameStore'
 import { STAGE_H, PLAYFIELD_LEFT, PLAYFIELD_RIGHT, FORMATION_SCALE } from '../config'
 
 const POOL_SIZE = 160
-const DENSITY_MULT = 1.5
 
 const DEFAULT_INTERVAL: Record<Formation, number> = {
   'line-top': 0.12,
@@ -37,7 +35,9 @@ export class WaveSystem {
   private elapsed = 0
   private nextWaveIdx = 0
   private waves: WaveEntry[] = []
-  private bossTriggerTime = 42
+  private endTime = 42
+  private hasBoss = false
+  private densityMult = 1
   bossTriggered = false
 
   constructor(private container: Container) {}
@@ -64,7 +64,9 @@ export class WaveSystem {
 
   loadStage(cfg: StageConfig) {
     this.waves = cfg.waves
-    this.bossTriggerTime = cfg.bossTriggerTime
+    this.endTime = cfg.endTime
+    this.hasBoss = !!cfg.boss
+    this.densityMult = cfg.densityMult
     this.elapsed = 0
     this.nextWaveIdx = 0
     this.bossTriggered = false
@@ -105,7 +107,7 @@ export class WaveSystem {
 
     const horizontal = ['line-top', 'v-shape', 'arc-left', 'arc-right', 'split', 'pincer']
       .includes(entry.formation)
-    const count = Math.round(entry.count * DENSITY_MULT * (horizontal ? FORMATION_SCALE : 1))
+    const count = Math.max(1, Math.round(entry.count * this.densityMult * (horizontal ? FORMATION_SCALE : 1)))
     const positions = formation(entry.formation, count, STAGE_H)
     const interval = entry.interval ?? DEFAULT_INTERVAL[entry.formation]
 
@@ -119,7 +121,7 @@ export class WaveSystem {
     this.pending.sort((a, b) => a.releaseAt - b.releaseAt)
   }
 
-  update(dt: number, enemyBullets: BulletPool, playerX: number, playerY: number, stageH: number)
+  update(dt: number, pools: HostilePools, playerX: number, playerY: number, stageH: number)
     : { spawnBoss: boolean; activeLasers: Array<{ x: number; fromY: number }> } {
     this.elapsed += dt
 
@@ -141,14 +143,22 @@ export class WaveSystem {
     const activeLasers: Array<{ x: number; fromY: number }> = []
     for (const e of this.enemies) {
       if (!e.active) continue
-      e.update(dt, enemyBullets, stageH, playerX, playerY)
+      e.update(dt, pools, stageH, playerX, playerY)
       const laser = e.activeLaser
       if (laser) activeLasers.push(laser)
     }
 
-    const spawnBoss = !this.bossTriggered && this.elapsed >= this.bossTriggerTime
+    const spawnBoss = this.hasBoss && !this.bossTriggered && this.elapsed >= this.endTime
     if (spawnBoss) this.bossTriggered = true
     return { spawnBoss, activeLasers }
+  }
+
+  /** Boss-less stages: every wave has spawned, the end time has passed and
+   *  nothing is left alive on the field. */
+  get finished(): boolean {
+    if (this.hasBoss || this.elapsed < this.endTime) return false
+    if (this.nextWaveIdx < this.waves.length || this.pending.length) return false
+    return !this.enemies.some((e) => e.active)
   }
 
   dismissAll() {

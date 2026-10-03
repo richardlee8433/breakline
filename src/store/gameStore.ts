@@ -14,7 +14,7 @@ interface GameState {
   loop: number   // playthrough number; enemies get faster each loop
   lives: number
   stage: number
-  phase: 'title' | 'playing' | 'stageclear' | 'advancing' | 'gameover'
+  phase: 'title' | 'playing' | 'stageclear' | 'advancing' | 'gameover' | 'complete'
   bossHp: number
   bossMaxHp: number
   bossActive: boolean
@@ -118,7 +118,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   addLife: () => set((s) => ({ lives: Math.min(5, s.lives + 1) })),
   setPhase: (phase) => set((s) => {
     // Persist the record at the end of a run
-    if (phase === 'gameover' || phase === 'title') saveHiScore(s.hiScore)
+    if (phase === 'gameover' || phase === 'complete' || phase === 'title') saveHiScore(s.hiScore)
     return { phase, paused: false }
   }),
   setBossHp: (hp, max) => set({ bossHp: hp, bossMaxHp: max }),

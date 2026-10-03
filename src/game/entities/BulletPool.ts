@@ -15,7 +15,9 @@ export class BulletPool {
    *  slots rather than building a filtered array each frame. */
   readonly all: Bullet[] = []
 
-  constructor(container: Container, private texture: Texture, size: number) {
+  /** `orient`: rotate each sprite to its velocity (missiles); otherwise
+   *  sprites stay upright (round energy rounds, player shots). */
+  constructor(container: Container, private texture: Texture, size: number, private orient = false) {
     for (let i = 0; i < size; i++) {
       const sprite = new Sprite(texture)
       sprite.anchor.set(0.5)
@@ -41,6 +43,7 @@ export class BulletPool {
     b.sprite.tint = tint
     b.sprite.scale.set(scale)
     b.sprite.texture = texture ?? this.texture
+    b.sprite.rotation = this.orient ? Math.atan2(vy, vx) + Math.PI / 2 : 0
     b.sprite.visible = true
     return b
   }

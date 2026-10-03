@@ -1,4 +1,4 @@
-import { BulletPool } from '../entities/BulletPool'
+import { Bullet, BulletPool } from '../entities/BulletPool'
 import { Enemy } from '../entities/Enemy'
 import { Player } from '../entities/Player'
 import { Boss } from '../entities/Boss'
@@ -15,6 +15,10 @@ import { spawnEnemyDrop } from './DropSystem'
 
 const GRAZE_RADIUS = 22 * SPRITE_SCALE
 const BULLET_R = 3 * SPRITE_SCALE
+/** Missile hit radius for player shots. Generous: shooting one down should
+ *  feel reliable. Against the player it uses BULLET_R like any round. */
+const MISSILE_R = 8 * SPRITE_SCALE
+const MISSILE_SCORE = 20
 
 /** Everything a kill needs to pay out, shared by every damage source. */
 export interface KillFx {
@@ -46,6 +50,12 @@ export function damageEnemy(enemy: Enemy, damage: number, fx: KillFx): boolean {
   return true
 }
 
+export function shootDownMissile(pool: BulletPool, missile: Bullet, fx: KillFx) {
+  fx.explosions.spawn(missile.sprite.x, missile.sprite.y, 0.7)
+  gameStore.getState().addScore(MISSILE_SCORE)
+  pool.release(missile)
+}
+
 /** Damage the boss at an impact point, handling its death payout. */
 export function damageBoss(boss: Boss, damage: number, impactX: number, impactY: number, fx: KillFx, bossBullets: BulletPool): boolean {
   const died = boss.hit(damage, impactX, impactY)
@@ -59,7 +69,7 @@ export function damageBoss(boss: Boss, damage: number, impactX: number, impactY:
 
 export class CollisionSystem {
   check(
-    playerBullets: BulletPool, enemyBullets: BulletPool, bossBullets: BulletPool,
+    playerBullets: BulletPool, enemyBullets: BulletPool, bossBullets: BulletPool, missiles: BulletPool,
     enemies: Enemy[], boss: Boss | null, player: Player, fx: KillFx,
   ) {
     const bossBox = boss?.active ? boss.hitboxWorld : null
@@ -77,6 +87,17 @@ export class CollisionSystem {
         playerBullets.release(bullet)
         damageEnemy(enemy, bullet.damage, fx)
         break
+      }
+
+      // Missiles are solid: a normal shot knocks one down.
+      if (bullet.active) {
+        for (const m of missiles.all) {
+          if (!m.active) continue
+          if (!overlaps(bx, by, bw, bh, m.sprite.x - MISSILE_R, m.sprite.y - MISSILE_R, MISSILE_R * 2, MISSILE_R * 2)) continue
+          playerBullets.release(bullet)
+          shootDownMissile(missiles, m, fx)
+          break
+        }
       }
 
       if (bullet.active && bossBox && boss &&
@@ -102,7 +123,7 @@ export class CollisionSystem {
 
     // ── hostile bullets → player (hit, else graze) ──────────────────────
     const g = GRAZE_RADIUS
-    for (const pool of [enemyBullets, bossBullets]) {
+    for (const pool of [enemyBullets, bossBullets, missiles]) {
       for (const bullet of pool.all) {
         if (!bullet.active) continue
         const bx = bullet.sprite.x - BULLET_R, by = bullet.sprite.y - BULLET_R

@@ -4,8 +4,16 @@ import { BulletPool } from './BulletPool'
 import { EnemyPath } from '../data/stages'
 import { fireRing, fireAimedFan } from '../systems/BulletPatterns'
 import { STAGE_H, PLAYFIELD_LEFT, PLAYFIELD_RIGHT, SPRITE_SCALE } from '../config'
+import { audioSystem } from '../systems/AudioSystem'
 
 export type { EnemyPath }
+
+/** Hostile fire is pooled by kind, so "can this be absorbed?" is answered
+ *  by which pool a round lives in rather than by a per-bullet flag. */
+export interface HostilePools {
+  energy: BulletPool
+  missile: BulletPool
+}
 
 export class Enemy {
   sprite: Sprite
@@ -34,6 +42,9 @@ export class Enemy {
   private aimVx = 0
   private aimVy = 1
   private diveLocked = false
+  private hoverY = 0
+  private hoverPhase: 0 | 1 | 2 = 0   // descending → holding station → leaving
+  private hoverAge = 0
 
   constructor(private container: Container, texture: Texture) {
     this.engineG = new Graphics()
@@ -93,6 +104,9 @@ export class Enemy {
     this.aimVx = 0
     this.aimVy = 1
     this.diveLocked = false
+    this.hoverY = STAGE_H * (0.14 + Math.random() * 0.14)
+    this.hoverPhase = 0
+    this.hoverAge = 0
     if (path === 'dive') this.lockDive(x, y, playerX)
 
     const hw = (this.sprite.width * 0.6) / 2
@@ -129,7 +143,7 @@ export class Enemy {
     this.sprite.tint = 0xff684f
   }
 
-  update(dt: number, bulletPool: BulletPool, stageH: number, playerX: number, playerY = 512) {
+  update(dt: number, pools: HostilePools, stageH: number, playerX: number, playerY = 512) {
     if (!this.active) return
     this.age += dt
 
@@ -170,6 +184,21 @@ export class Enemy {
         break
       }
 
+      case 'hover':
+        // Drop in, hold station with a gentle sway while firing, then leave.
+        // Gives the player a steady stream to practise reading and catching.
+        if (this.hoverPhase === 0) {
+          this.sprite.y += spd * dt
+          if (this.sprite.y >= this.hoverY) this.hoverPhase = 1
+        } else if (this.hoverPhase === 1) {
+          this.hoverAge += dt
+          this.sprite.x = this.spawnX + Math.sin(this.hoverAge * 1.3) * 22 * SPRITE_SCALE
+          if (this.hoverAge >= (this.def.hoverTime ?? 6)) this.hoverPhase = 2
+        } else {
+          this.sprite.y += spd * 1.3 * dt
+        }
+        break
+
       case 'dive':
         this.sprite.x += this.aimVx * spd * dt
         this.sprite.y += this.aimVy * spd * dt
@@ -196,7 +225,7 @@ export class Enemy {
       if (this.fireTimer <= 0) {
         this.fireTimer += this.def.fireRate
         if (this.fireTimer <= 0) this.fireTimer = this.def.fireRate
-        this.fire(bulletPool, playerX, playerY)
+        this.fire(this.def.bulletKind === 'missile' ? pools.missile : pools.energy, playerX, playerY)
       }
     }
 
@@ -236,6 +265,7 @@ export class Enemy {
     const x = this.sprite.x
     const y = this.sprite.y + 10
     const spd = this.def.bulletSpeed
+    if (this.def.bulletKind === 'missile') audioSystem.playMissileLaunch()
 
     switch (this.def.attackType) {
       case 'aimed': {

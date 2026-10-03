@@ -32,3 +32,43 @@ export function makeGemTexture(renderer: Renderer, radius = 7): Texture {
   g.destroy()
   return tex
 }
+
+/**
+ * Absorbable energy round: a cyan HOLLOW ring. Shape carries the meaning as
+ * much as color does — a ring reads as "energy you can catch" even to a
+ * colour-blind player, against the solid arrow of a missile.
+ */
+export function makeEnergyBulletTexture(renderer: Renderer, radius: number): Texture {
+  const g = new Graphics()
+  const color = 0x33eeff
+  g.circle(0, 0, radius * 2.2).fill({ color, alpha: 0.10 })
+  g.circle(0, 0, radius * 1.55).fill({ color, alpha: 0.20 })
+  g.circle(0, 0, radius).stroke({ color, width: radius * 0.55, alpha: 0.95 })
+  g.circle(0, 0, radius).stroke({ color: 0xffffff, width: radius * 0.2, alpha: 0.95 })
+  g.circle(0, 0, radius * 0.22).fill({ color: 0xffffff, alpha: 0.55 })
+  const tex = renderer.generateTexture({ target: g, antialias: true })
+  g.destroy()
+  return tex
+}
+
+/**
+ * Non-absorbable missile, drawn pointing UP (the pool rotates it to its
+ * velocity): solid orange-red body, arrowhead, fins and a yellow exhaust.
+ * Nothing about it is round or hollow.
+ */
+export function makeMissileTexture(renderer: Renderer, scale: number): Texture {
+  const g = new Graphics()
+  const w = 5.5 * scale, h = 18 * scale
+  g.ellipse(0, 0, w * 2.6, h * 1.1).fill({ color: 0xff3300, alpha: 0.16 })           // warning halo
+  g.ellipse(0, h * 0.75, w * 1.1, h * 0.55).fill({ color: 0xffcc33, alpha: 0.30 })   // exhaust glow
+  g.poly([-w * 0.6, h * 0.45, 0, h * 1.05, w * 0.6, h * 0.45]).fill(0xffee88)         // flame
+  g.poly([-w * 1.6, h * 0.5, -w, h * 0.05, -w, h * 0.5]).fill(0xb8321a)               // fins
+  g.poly([w * 1.6, h * 0.5, w, h * 0.05, w, h * 0.5]).fill(0xb8321a)
+  g.rect(-w, -h * 0.45, w * 2, h * 0.95).fill(0xff4a1c)                               // body
+  g.poly([-w, -h * 0.45, 0, -h, w, -h * 0.45]).fill(0xffffff)                         // warhead
+  g.poly([-w * 0.55, -h * 0.5, 0, -h * 0.82, w * 0.55, -h * 0.5]).fill(0xff2a10)
+  g.rect(-w, -h * 0.05, w * 2, h * 0.12).fill(0xffffff)                               // warning band
+  const tex = renderer.generateTexture({ target: g, antialias: true })
+  g.destroy()
+  return tex
+}

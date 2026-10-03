@@ -12,7 +12,7 @@ export type SfxKey =
   | 'shoot' | 'boss-hurt' | 'player-hit' | 'siren'
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
   | 'pickup-life'
-  | 'gem' | 'graze'
+  | 'gem' | 'graze' | 'missile-launch'
 
 export interface SfxDef {
   /** File name inside SFX_DIR. */
@@ -45,6 +45,7 @@ export const SFX: Record<SfxKey, SfxDef> = {
   'pickup-life':     { src: 'pickup-life.ogg',  gain: 0.60 },
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },
+  'missile-launch':  { src: 'bigshot1.ogg',     gain: 0.40, throttleMs: 120, detune: 40 },
 }
 
 export type MusicKey =

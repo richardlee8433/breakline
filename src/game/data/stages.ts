@@ -1,7 +1,7 @@
 export type BgTheme = 'space' | 'nebula' | 'asteroid'
 export type EnemyPath =
   | 'straight' | 'zigzag' | 'dive' | 'diagonal-left' | 'diagonal-right'
-  | 'swoop-left' | 'swoop-right' | 'sine'
+  | 'swoop-left' | 'swoop-right' | 'sine' | 'hover'
 export type Formation =
   | 'line-top' | 'line-left' | 'line-right' | 'v-shape'
   | 'arc-left' | 'arc-right' | 'split' | 'pincer'
@@ -44,15 +44,20 @@ export interface StageConfig {
   id: number
   bgTheme: BgTheme
   waves: WaveEntry[]
-  bossTriggerTime: number
-  boss: BossConfig
+  /** Multiplies every wave's count (neon-raiden's stages ran at 1.5). */
+  densityMult: number
+  /** With a boss: the time it is called in. Without one, the stage ends
+   *  once this time has passed and the field is clear. */
+  endTime: number
+  boss?: BossConfig
 }
 
 // Stage 1 — Deep Space: readable formations, with gentle curved entries.
 const stage1: StageConfig = {
   id: 1,
   bgTheme: 'space',
-  bossTriggerTime: 42,
+  densityMult: 1.5,
+  endTime: 42,
   waves: [
     { time: 1,  type: 'fighter', count: 5, formation: 'line-top', path: 'straight',
       variants: [{ formation: 'split' }, { formation: 'v-shape', path: 'sine' }] },
@@ -82,7 +87,8 @@ const stage1: StageConfig = {
 const stage2: StageConfig = {
   id: 2,
   bgTheme: 'nebula',
-  bossTriggerTime: 46,
+  densityMult: 1.5,
+  endTime: 46,
   waves: [
     { time: 1, type: 'interceptor', count: 6, formation: 'split', path: 'sine',
       variants: [{ formation: 'v-shape', path: 'dive' }] },
@@ -114,7 +120,8 @@ const stage2: StageConfig = {
 const stage3: StageConfig = {
   id: 3,
   bgTheme: 'asteroid',
-  bossTriggerTime: 44,
+  densityMult: 1.5,
+  endTime: 44,
   waves: [
     { time: 1, type: 'elite', count: 7, formation: 'arc-left', path: 'swoop-right',
       variants: [{ formation: 'arc-right', path: 'swoop-left' }, { formation: 'split', path: 'sine' }] },
@@ -143,4 +150,33 @@ const stage3: StageConfig = {
   },
 }
 
-export const STAGES: StageConfig[] = [stage1, stage2, stage3]
+/** neon-raiden's three stages, kept as reference material for Phase 2–3. */
+export const LEGACY_STAGES: StageConfig[] = [stage1, stage2, stage3]
+
+// Phase 1 combat arena: introduce each rule alone, then mix them.
+// Energy drones first (absorb), missiles alone (the contrast), then both.
+const arena: StageConfig = {
+  id: 1,
+  bgTheme: 'space',
+  densityMult: 1,
+  endTime: 70,
+  waves: [
+    // absorb: sparse drones holding station
+    { time: 1,  type: 'drone', count: 2, formation: 'line-top', path: 'hover', interval: 0.4 },
+    { time: 9,  type: 'drone', count: 3, formation: 'v-shape', path: 'hover' },
+    // contrast: missiles on their own
+    { time: 18, type: 'missileer', count: 1, formation: 'line-top', path: 'hover' },
+    { time: 25, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
+    // mixed
+    { time: 33, type: 'drone', count: 3, formation: 'line-top', path: 'hover' },
+    { time: 35, type: 'missileer', count: 1, formation: 'line-top', path: 'hover' },
+    { time: 42, type: 'drone', count: 4, formation: 'arc-left', path: 'swoop-right',
+      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
+    { time: 44, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
+    { time: 52, type: 'drone', count: 4, formation: 'v-shape', path: 'hover' },
+    { time: 54, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
+    { time: 58, type: 'drone', count: 3, formation: 'split', path: 'sine' },
+  ],
+}
+
+export const STAGES: StageConfig[] = [arena]

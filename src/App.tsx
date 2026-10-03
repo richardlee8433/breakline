@@ -68,6 +68,7 @@ export default function App() {
       <HUD />
       {phase === 'title'      && <TitleScreen />}
       {phase === 'gameover'   && <GameOverScreen />}
+      {phase === 'complete'   && <GameOverScreen cleared />}
       {phase === 'stageclear' && <StageClearScreen />}
       {phase === 'advancing'  && <StageAnnouncement />}
       {paused && phase === 'playing' && (

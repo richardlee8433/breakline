@@ -8,6 +8,7 @@ import { WaveSystem } from '../systems/WaveSystem'
 import { BulletPool } from '../entities/BulletPool'
 import { Player } from '../entities/Player'
 import { Boss } from '../entities/Boss'
+import { HostilePools } from '../entities/Enemy'
 import { PickupPool } from '../entities/Pickup'
 import { ExplosionPool } from '../fx/Explosion'
 import { BombEffect } from '../fx/BombEffect'
@@ -15,7 +16,7 @@ import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
 import { BulletTrail } from '../fx/BulletTrail'
 import { Shockwave } from '../fx/Shockwave'
-import { makeGlowBulletTexture } from '../fx/GlowTexture'
+import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture } from '../fx/GlowTexture'
 import { GemPool } from '../entities/Gem'
 import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
@@ -39,6 +40,8 @@ export class GameApp {
   private playerBullets!: BulletPool
   private enemyBullets!: BulletPool
   private bossBullets!: BulletPool
+  private missiles!: BulletPool
+  private hostilePools!: HostilePools
   private player!: Player
   private boss!: Boss
   private pickups!: PickupPool
@@ -124,15 +127,17 @@ export class GameApp {
 
     this.scroll = new ScrollSystem(this.bgLayer, W, H, 'space')
 
-    // Neon glow bullets (danmaku-style): enemy fire must pop against the
-    // dark background and read differently from the player's shots.
-    const enemyBulletTex = makeGlowBulletTexture(this.app.renderer, 0xff2e88, 5 * SPRITE_SCALE)
-    const bossBulletTex  = makeGlowBulletTexture(this.app.renderer, 0x33eeff, 6 * SPRITE_SCALE)
+    // Hostile fire comes in two kinds that must never be confused: cyan
+    // hollow rings (energy, absorbable) and orange arrows (missiles, not).
+    const energyTex = makeEnergyBulletTexture(this.app.renderer, 5 * SPRITE_SCALE)
+    const bossEnergyTex = makeEnergyBulletTexture(this.app.renderer, 6 * SPRITE_SCALE)
+    const missileTex = makeMissileTexture(this.app.renderer, SPRITE_SCALE)
 
     this.bulletTrail   = new BulletTrail(this.bulletLayer)
     this.playerBullets = new BulletPool(this.bulletLayer, assets.playerBullet, 300)
-    this.enemyBullets  = new BulletPool(this.bulletLayer, enemyBulletTex, 1000)
-    this.bossBullets   = new BulletPool(this.bulletLayer, bossBulletTex,  200)
+    this.enemyBullets  = new BulletPool(this.bulletLayer, energyTex, 1000)
+    this.bossBullets   = new BulletPool(this.bulletLayer, bossEnergyTex, 200)
+    this.missiles      = new BulletPool(this.bulletLayer, missileTex, 120, true)
 
     this.player    = new Player(this.gameLayer, assets.playerShip, this.playerBullets, H)
     this.boss      = new Boss(this.gameLayer)
@@ -148,6 +153,7 @@ export class GameApp {
     this.exhaust    = new EngineExhaust(
       this.bulletLayer, makeGlowBulletTexture(this.app.renderer, 0x44aaff, 3.5 * SPRITE_SCALE))
 
+    this.hostilePools = { energy: this.enemyBullets, missile: this.missiles }
     this.waves = new WaveSystem(this.gameLayer)
     await this.waves.loadTextures()
 
@@ -160,6 +166,7 @@ export class GameApp {
         this.handleStageClear(s.stage)
       }
       if (s.phase === 'gameover' && s.phase !== prev.phase) musicSystem.stop()
+      if (s.phase === 'complete' && s.phase !== prev.phase) musicSystem.playJingle('stage-clear')
       if (s.phase === 'title' && s.phase !== prev.phase) musicSystem.playTitle()
     })
 
@@ -204,6 +211,7 @@ export class GameApp {
     this.playerBullets.releaseAll()
     this.enemyBullets.releaseAll()
     this.bossBullets.releaseAll()
+    this.missiles.releaseAll()
     this.pickups.releaseAll()
     this.gems.releaseAll()
     this.floats.releaseAll()
@@ -261,8 +269,10 @@ export class GameApp {
     this.playerBullets.update(dt, W, H)
     this.enemyBullets.update(dt, W, H)
     this.bossBullets.update(dt, W, H)
+    this.missiles.update(dt, W, H)
 
-    const { spawnBoss, activeLasers } = this.waves.update(dt, this.enemyBullets, this.player.x, this.player.y, H)
+    const { spawnBoss, activeLasers } = this.waves.update(
+      dt, this.hostilePools, this.player.x, this.player.y, H)
     if (spawnBoss && !this.boss.active && this.bossCountdown < 0) {
       // WARNING phase: clear the field, blare the siren, boss enters after it
       this.bossCountdown = 2.4
@@ -273,25 +283,29 @@ export class GameApp {
       musicSystem.playBoss()
       this.waves.dismissAll()
       this.enemyBullets.releaseAll()
+      this.missiles.releaseAll()
       // Warm the browser cache during the siren — boss art runs to a few
       // hundred KB, and spawn() fetches it at the instant it must appear.
-      new Image().src = (STAGES[gameStore.getState().stage - 1] ?? STAGES[0]).boss.shipSprite
+      const sprite = (STAGES[gameStore.getState().stage - 1] ?? STAGES[0]).boss?.shipSprite
+      if (sprite) new Image().src = sprite
     }
     if (this.bossCountdown >= 0) {
       this.bossCountdown -= dt
       if (this.bossCountdown < 0 && !this.boss.active) {
         gameStore.getState().setBossWarning(false)
         const { stage, loop } = gameStore.getState()
-        const cfg = STAGES[stage - 1] ?? STAGES[0]
+        const base = (STAGES[stage - 1] ?? STAGES[0]).boss
         // Loop rank: later playthroughs field tougher, faster bosses
         const rank = Math.min(loop - 1, 4)
-        const boss = rank === 0 ? cfg.boss : {
-          ...cfg.boss,
-          maxHp: Math.round(cfg.boss.maxHp * (1 + 0.25 * rank)),
-          bulletSpeedMult: cfg.boss.bulletSpeedMult * (1 + 0.12 * rank),
-          fireRateMult: cfg.boss.fireRateMult / (1 + 0.08 * rank),
+        if (base) {
+          const boss = rank === 0 ? base : {
+            ...base,
+            maxHp: Math.round(base.maxHp * (1 + 0.25 * rank)),
+            bulletSpeedMult: base.bulletSpeedMult * (1 + 0.12 * rank),
+            fireRateMult: base.fireRateMult / (1 + 0.08 * rank),
+          }
+          this.boss.spawn(boss, stage)
         }
-        this.boss.spawn(boss, stage)
       }
     }
 
@@ -314,7 +328,7 @@ export class GameApp {
     this.gems.update(dt, this.player.x, this.player.y, H)
 
     this.collision.check(
-      this.playerBullets, this.enemyBullets, this.bossBullets,
+      this.playerBullets, this.enemyBullets, this.bossBullets, this.missiles,
       this.waves.enemies,
       this.boss.active ? this.boss : null,
       this.player, this.killFx,
@@ -324,6 +338,9 @@ export class GameApp {
     this.bombEffect.update(dt)
     this.shockwave.update(dt)
     this.floats.update(dt)
+
+    // Boss-less stages (the Phase 1 arena) end once the field is clear.
+    if (this.waves.finished && !this.player.isDead) gameStore.getState().setPhase('complete')
   }
 
   private onPlayerDeath() {

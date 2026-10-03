@@ -1,3 +1,7 @@
+/** energy: cyan hollow ring, absorbable. missile: orange arrow, must be
+ *  dodged, dashed through or shot down. */
+export type BulletKind = 'energy' | 'missile'
+
 export interface EnemyDef {
   sprite: string
   hp: number
@@ -12,9 +16,33 @@ export interface EnemyDef {
   attackType?: 'straight' | 'aimed' | 'spread' | 'ring' | 'spiral' | 'aimed-fan'
   spreadCount?: number
   bulletCount?: number  // ring: bullets per volley / spiral: arms / aimed-fan: fan size
+  bulletKind?: BulletKind   // default 'energy'
+  /** 'hover' path only: seconds spent holding station before leaving. */
+  hoverTime?: number
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
+  // ── Phase 1 arena ─────────────────────────────────────────
+  // Patrol drone: teaches absorbing. Fragile, holds station, and fires a slow
+  // forward 3-way of energy rounds — easy to read, easy to catch.
+  drone: {
+    sprite: './assets/enemies/enemy-fighter.png',
+    hp: 8, speed: 110, scoreValue: 120,
+    fireRate: 1.5, bulletSpeed: 165, scale: 0.78,
+    engineColor: 0x37dfff, engineCount: 1,
+    attackType: 'spread', spreadCount: 3, bulletKind: 'energy',
+    hoverTime: 6,
+  },
+  // Missile interceptor: the contrast case. Its aimed missiles cannot be
+  // absorbed, so it teaches that the core is not a universal shield.
+  missileer: {
+    sprite: './assets/enemies/enemy-elite.png',
+    hp: 16, speed: 90, scoreValue: 300,
+    fireRate: 2.3, bulletSpeed: 235, scale: 0.82,
+    engineColor: 0xff7a24, engineCount: 2,
+    attackType: 'aimed', bulletKind: 'missile',
+    hoverTime: 7,
+  },
   // ── Stage 1 ───────────────────────────────────────────────
   fighter: {
     sprite: './assets/enemies/enemy-fighter.png',
