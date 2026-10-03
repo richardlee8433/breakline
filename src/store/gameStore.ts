@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { STORY_STAGES, STORY_LENGTH, type GameMode } from '../game/data/stages'
 import { introFor, type SceneId, type Speaker } from '../game/data/story'
-import { HULL } from '../game/data/chase'
+import { HULL, LIVES } from '../game/data/chase'
 
 /** HUD-facing mirror of the core, written by GameApp at a throttled rate. */
 export interface CoreView {
@@ -25,6 +25,12 @@ export interface StageReport {
   stage: number
   mode: GameMode
   cleared: boolean
+  /** What took the last life (game over), else null. */
+  fatal: HitCause | null
+  /** Cleared stages only: integrity and lives turned into points. */
+  score: number
+  integrity: number      // hull left as a percentage
+  livesLeft: number
   seconds: number        // time survived
   duration: number       // the stage's length
   hullLeft: number
@@ -51,6 +57,13 @@ interface GameState {
   /** A short in-combat conversation. Combat pauses under it. */
   talk: SceneId | null
   hull: number
+  /** Lives left in this run (LIVES.start at the start of each run). */
+  lives: number
+  /** Lives when the current stage began: a restart from the pause menu
+   *  goes back to this, a retry after game over to a full LIVES.start. */
+  livesAtStage: number
+  /** Score per cleared stage in this run, by stage number. */
+  stageScores: Record<number, number>
   /** Whole seconds left in the stage (rounded up). */
   timeLeft: number
   /** The stage's full length, for the progress readouts. */
@@ -70,6 +83,10 @@ interface GameState {
   setPhase: (p: GameState['phase']) => void
   setCore: (c: CoreView) => void
   setHull: (n: number) => void
+  /** Spend a life; returns how many are left. */
+  loseLife: () => number
+  markStageStart: () => void
+  setStageScore: (stage: number, score: number) => void
   setClock: (timeLeft: number, duration: number) => void
   setHint: (h: Hint | null) => void
   setReport: (r: StageReport | null) => void
@@ -100,6 +117,9 @@ const freshPlay = {
   storyScene: null as SceneId | null,
   talk: null as SceneId | null,
   hull: HULL.max,
+  lives: LIVES.start,
+  livesAtStage: LIVES.start,
+  stageScores: {} as Record<number, number>,
   timeLeft: 0,
   duration: 1,
   paused: false,
@@ -142,7 +162,7 @@ function saveSoundPref(on: boolean) {
   } catch { /* ignore */ }
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   ...freshPlay,
   phase: 'title',
   mode: 'story' as GameMode,
@@ -153,6 +173,12 @@ export const useGameStore = create<GameState>((set) => ({
   setPhase: (phase) => set({ phase, paused: false }),
   setCore: (core) => set({ core }),
   setHull: (hull) => set((s) => (s.hull === hull ? s : { hull })),
+  loseLife: () => {
+    set((s) => ({ lives: Math.max(0, s.lives - 1) }))
+    return get().lives
+  },
+  markStageStart: () => set((s) => (s.livesAtStage === s.lives ? s : { livesAtStage: s.lives })),
+  setStageScore: (stage, score) => set((s) => ({ stageScores: { ...s.stageScores, [stage]: score } })),
   setClock: (timeLeft, duration) => set((s) =>
     (s.timeLeft === timeLeft && s.duration === duration ? s : { timeLeft, duration })),
   setHint: (hint) => set({ hint }),
@@ -177,6 +203,9 @@ export const useGameStore = create<GameState>((set) => ({
   }),
   retryStage: () => set((s) => ({
     phase: 'playing', paused: false, talk: null, report: null, storyScene: null, runSerial: s.runSerial + 1,
+    // After a game over a retry is a new round: full lives. A restart
+    // mid-stage (pause menu) or after a clear puts back the stage's start.
+    lives: s.phase === 'gameover' ? LIVES.start : s.livesAtStage,
   })),
   continueRun: () => set((s) => {
     if (s.phase !== 'stageclear' || s.mode !== 'story') return s

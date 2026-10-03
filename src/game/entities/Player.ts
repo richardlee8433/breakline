@@ -1,7 +1,7 @@
 import { Container, Sprite, Texture } from 'pixi.js'
 import { Actions } from '../systems/InputSystem'
 import { PLAYFIELD_LEFT, PLAYFIELD_RIGHT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
-import { PLAYER, HULL } from '../data/chase'
+import { PLAYER, HULL, LIVES } from '../data/chase'
 import type { HitCause } from '../../store/gameStore'
 
 const SPEED = PLAYER.speed * SPRITE_SCALE
@@ -73,6 +73,13 @@ export class Player {
     this.sprite.tint = 0xffffff
     this.sprite.x = CENTER_X
     this.sprite.y = this.stageH * PLAYER.startY
+  }
+
+  /** Next life: fresh hull at the start position, briefly untouchable. */
+  respawn() {
+    this.reset()
+    this.invincible = LIVES.respawnInvincible
+    this.flashTimer = 0
   }
 
   update(dt: number, actions: Actions) {

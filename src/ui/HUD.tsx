@@ -1,7 +1,7 @@
 import { useGameStore } from '../store/gameStore'
 import { STAGE_W, PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT } from '../game/config'
 import { stageConfig } from '../game/data/stages'
-import { HULL } from '../game/data/chase'
+import { HULL, LIVES } from '../game/data/chase'
 import { SPEAKERS } from '../game/data/story'
 import { EmpPanel } from './EmpPanel'
 
@@ -32,7 +32,7 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 /** Hull, the stage clock and objective, the EMP gauge (design v0.2 §5). */
 export function HUD() {
-  const { hull, timeLeft, duration, stage, soundEnabled, toggleSound, togglePause } = useGameStore()
+  const { hull, lives, timeLeft, duration, stage, soundEnabled, toggleSound, togglePause } = useGameStore()
   const cfg = stageConfig(stage)
   const urgent = timeLeft <= 10
   const progress = Math.min(1, Math.max(0, 1 - timeLeft / duration))
@@ -70,6 +70,8 @@ export function HUD() {
       <span style={{ color: '#8899aa', letterSpacing: 2, marginRight: 6 }}>HULL</span>
       <span style={{ color: hull <= 1 ? '#ff5544' : '#ffd25a' }}>{'◆'.repeat(hull)}</span>
       <span style={{ color: '#4a4f5c' }}>{'◇'.repeat(Math.max(0, HULL.max - hull))}</span>
+      <span style={{ marginLeft: 10, color: '#ff6a7a' }}>{'♥'.repeat(lives)}</span>
+      <span style={{ color: '#4a4f5c' }}>{'♡'.repeat(Math.max(0, LIVES.start - lives))}</span>
     </span>
   )
 

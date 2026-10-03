@@ -42,11 +42,28 @@ export const EMP = {
 }
 
 export const HULL = {
-  /** Fresh every stage. Missiles, rams, rocks and mine blasts cost one each. */
+  /** Fresh every stage and every life. Missiles, rams, rocks and mine
+   *  blasts cost one each. */
   max: 3,
   iframes: 1.5,
-  /** Ticker-timed beat between the last hit and the game-over screen. */
+  /** Ticker-timed beat after the hull gives out (the clock waits), before
+   *  the next life — or the game-over screen. */
   deathBeat: 1.4,
+}
+
+/** Lives: a run (story, or one trial stage) starts with this many. Losing
+ *  the hull costs one and the ship comes back on the spot with a fresh
+ *  hull; the last one ends the run. */
+export const LIVES = {
+  start: 3,
+  respawnInvincible: 2,
+}
+
+/** Stage score: hull integrity (0–100 %) and lives left when the clock
+ *  runs out. A flawless stage with every life is 10,000 + 15,000. */
+export const SCORE = {
+  perIntegrityPct: 100,
+  perLife: 5000,
 }
 
 /** Pursuer behaviour. They only ever come from behind (below the ship). */

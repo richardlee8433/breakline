@@ -20,7 +20,7 @@ import { EngineExhaust } from '../fx/EngineExhaust'
 import { FloatingTextPool } from '../fx/FloatingText'
 import { musicSystem } from '../systems/MusicSystem'
 import { audioSystem } from '../systems/AudioSystem'
-import { EMP, FIELD, HULL, JUMP } from '../data/chase'
+import { EMP, FIELD, HULL, JUMP, SCORE } from '../data/chase'
 import { stageConfig, StageConfig } from '../data/stages'
 import { gameStore, HitCause, Hint } from '../../store/gameStore'
 import type { Speaker } from '../data/story'
@@ -82,7 +82,8 @@ export class GameApp {
   private cfg!: StageConfig
   private elapsed = 0
   private duration = 1
-  private deathTimer = 0       // > 0: the ship is gone, game over follows
+  private deathTimer = 0       // > 0: the ship is gone; next life or game over follows
+  private fatal: HitCause | null = null
   private jumpTimer = 0        // > 0: stage 3's synchronized jump is playing
   private finaleOn = false
   private empHeld = true       // edge detection: one press, one pulse
@@ -240,12 +241,14 @@ export class GameApp {
     this.elapsed = 0
     this.duration = cfg.duration
     this.deathTimer = 0
+    this.fatal = null
     this.jumpTimer = 0
     this.finaleOn = false
     this.jumpG.clear()
     this.empHeld = true
     this.stats = { disabled: 0, shaken: 0, still: 0, hits: freshHits() }
     const s = gameStore.getState()
+    s.markStageStart()
     s.setReport(null)
     s.setHull(this.player.hull)
     s.setClock(Math.ceil(this.duration), this.duration)
@@ -296,7 +299,8 @@ export class GameApp {
     // Stage 3 is won: the jump plays out, nothing can hurt the ship.
     if (this.jumpTimer > 0) { this.updateJump(dt); return }
 
-    // The ship is gone: let the wreck burn for a beat, then game over.
+    // The ship is gone: let the wreck burn for a beat (the clock waits),
+    // then the next life — or game over after the last one.
     if (this.deathTimer > 0) {
       this.deathTimer -= dt
       this.energy.update(dt, W, H)
@@ -304,8 +308,13 @@ export class GameApp {
       this.waves.update(dt, this.hostile, this.player.x, this.player.y)
       this.hazards.update(dt, this.player, this.explosions)
       if (this.deathTimer <= 0) {
-        this.finishStage(false)
-        gameStore.getState().setPhase('gameover')
+        if (gameStore.getState().lives > 0) {
+          this.player.respawn()
+          gameStore.getState().setHull(this.player.hull)
+        } else {
+          this.finishStage(false)
+          gameStore.getState().setPhase('gameover')
+        }
       }
       return
     }
@@ -419,7 +428,9 @@ export class GameApp {
       screenShake.trigger(9)
       hitstop.trigger(0.15)
       this.deathTimer = HULL.deathBeat
+      this.fatal = cause
       this.field.clear()
+      gameStore.getState().loseLife()
       gameStore.getState().setHint(null)
       return
     }
@@ -494,11 +505,18 @@ export class GameApp {
     const s = gameStore.getState()
     const t = this.core.tally
     const round1 = (n: number) => Math.round(n * 10) / 10
+    const integrity = Math.round((this.player.hull / HULL.max) * 100)
+    const score = cleared ? integrity * SCORE.perIntegrityPct + s.lives * SCORE.perLife : 0
+    if (cleared) s.setStageScore(s.stage, score)
     s.setHint(null)
     s.setReport({
       stage: s.stage,
       mode: s.mode,
       cleared,
+      fatal: cleared ? null : this.fatal,
+      score,
+      integrity,
+      livesLeft: s.lives,
       seconds: round1(this.elapsed),
       duration: round1(this.duration),
       hullLeft: this.player.hull,

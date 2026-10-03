@@ -102,7 +102,12 @@ docs/                     # 設計文件、角色設定
   - 需要能量全滿，並距離上次至少 `EMP.cooldown` 秒。釋放時用掉整條能量。
   - 範圍內 `empable` 的追兵進入 `dark`：不開火、不追、沒有撞擊傷害，往後漂。漂出下緣算甩脫。
   - 範圍內的能源彈和飛彈清除。範圍外不受影響。不給玩家無敵。
-- **耐久**：每關 `HULL.max` 格，被打中後無敵 `HULL.iframes` 秒。歸零後播 `HULL.deathBeat` 秒的死亡演出，再進 gameover。
+- **耐久與生命**：
+  - 每關、每條命都有 `HULL.max` 格耐久。被打中後無敵 `HULL.iframes` 秒。
+  - 耐久歸零就扣一條命（store 的 `lives`，每一輪從 `LIVES.start` 開始），播 `HULL.deathBeat` 秒的演出（期間計時暫停），然後原地 `respawn()`。命用完才進 gameover。
+  - GAME OVER 後的 retry 會把命補回 `LIVES.start`。暫停選單的重來和過關後的 retry，會回到 `livesAtStage`。
+  - gameover 的說明文字依最後一擊的原因（`report.fatal`）顯示。
+- **分數**：過關時才計分，公式是「完整度 % × `SCORE.perIntegrityPct` + 剩餘生命 × `SCORE.perLife`」，存在 `stageScores`。結算畫面只顯示分數，完整數據收在 COPY PLAYTEST DATA。
 - **飛彈**：先鎖定（`LOCK.time`，有鎖定框和警示音），再朝玩家當下的位置發射。
   - 制導飛彈（粉紅色）的轉向速度有上限（`GUIDED.turnRate`），`GUIDED.life` 秒後熄火。
 - **小行星**：以列生成。每列保留至少 `gap` 寬的通道，通道每列最多移動 `drift`。
