@@ -1,6 +1,5 @@
 import { useGameStore, chainMult } from '../store/gameStore'
 import { STAGE_W, PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT } from '../game/config'
-import { BURST_MAX, MAX_BURST_LEVEL, burstTier } from '../game/data/burst'
 
 const IS_TOUCH = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0)
@@ -20,7 +19,7 @@ function tapKey(code: string) {
 }
 
 export function HUD() {
-  const { score, hiScore, graze, chain, burst, burstLevel, loop, lives, bombs, weapon,
+  const { score, hiScore, graze, chain, loop, lives, bombs, weapon,
           bossActive, bossHp, bossMaxHp, bossWarning,
           soundEnabled, toggleSound } = useGameStore()
   const mult = chainMult(chain)
@@ -33,14 +32,6 @@ export function HUD() {
       {weaponLabel}
     </span>
   )
-
-  const tier = burstTier(burstLevel)
-  const burstPct = Math.max(0, Math.min(100, (burst / BURST_MAX) * 100))
-  const burstReady = burst >= BURST_MAX && burstLevel < MAX_BURST_LEVEL
-  // Idle gauge is cool blue; ready and active states take the tier's accent so
-  // "can I burst?" is answerable from peripheral vision mid-dodge.
-  const burstColor = burstLevel > 0 ? tier.css
-                   : burstReady ? burstTier(1).css : '#3a7fa8'
 
   const mono = {
     color: '#fff', fontFamily: 'monospace', fontSize: 13,
@@ -92,37 +83,6 @@ export function HUD() {
     </div>
   )
 
-  const burstMeter = (
-    <div style={{ width: IS_WIDE ? '100%' : 150, pointerEvents: 'none', userSelect: 'none' }}>
-      <style>{`
-        @keyframes burstReadyPulse {
-          0%, 100% { opacity: 1; }
-          50%      { opacity: 0.45; }
-        }
-      `}</style>
-      <div style={{
-        ...mono, fontSize: 10, letterSpacing: 2, marginBottom: 3,
-        color: burstColor,
-        textShadow: burstLevel > 0 || burstReady ? `0 0 8px ${burstColor}` : '0 0 4px #000',
-        animation: burstReady ? 'burstReadyPulse 0.5s linear infinite' : undefined,
-      }}>
-        {burstLevel > 0 ? tier.label : burstReady ? 'BURST READY  [C]' : 'BURST'}
-      </div>
-      <div style={{
-        width: '100%', height: 7, background: 'rgba(255,255,255,0.10)',
-        borderRadius: 4, overflow: 'hidden',
-        boxShadow: burstLevel > 0 || burstReady ? `0 0 8px ${burstColor}` : undefined,
-      }}>
-        <div style={{
-          height: '100%', width: `${burstPct}%`, background: burstColor,
-          // Only ease the fill, never the drain: a burst has to read as
-          // spending down in real time, not lagging a tenth of a second behind.
-          transition: burstLevel > 0 ? 'none' : 'width 0.12s linear',
-        }} />
-      </div>
-    </div>
-  )
-
   return (
     <>
       {IS_WIDE ? (
@@ -138,7 +98,6 @@ export function HUD() {
             <span style={{ color: '#aab' }}>HI {String(hiScore).padStart(6, '0')}</span>
             {grazeLine}
             {chainLine}
-            <div style={{ width: '100%', marginTop: 4 }}>{burstMeter}</div>
           </div>
 
           {/* Right wing: resources & weapon meters */}
@@ -172,7 +131,6 @@ export function HUD() {
 
           <div style={{ position: 'absolute', top: 28, left: 10 }}>{grazeLine}</div>
           <div style={{ position: 'absolute', top: 44, left: 10 }}>{chainLine}</div>
-          <div style={{ position: 'absolute', top: 26, right: 10 }}>{burstMeter}</div>
         </>
       )}
 
@@ -193,23 +151,6 @@ export function HUD() {
             }}
           >
             💣
-          </button>
-          <button
-            onPointerDown={(e) => { e.stopPropagation(); tapKey('KeyC') }}
-            style={{
-              position: 'absolute', bottom: 92, right: 14,
-              width: 64, height: 64, borderRadius: '50%',
-              background: burstReady ? 'rgba(255,204,51,0.34)' : 'rgba(60,110,150,0.22)',
-              border: `2px solid ${burstReady ? burstColor : 'rgba(120,170,210,0.5)'}`,
-              boxShadow: burstReady ? `0 0 16px ${burstColor}` : undefined,
-              color: '#fff', fontSize: 12, fontFamily: 'monospace', letterSpacing: 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              userSelect: 'none', touchAction: 'none',
-              opacity: burstReady || burstLevel > 0 ? 1 : 0.45,
-              zIndex: 10,
-            }}
-          >
-            BURST
           </button>
         </>
       )}

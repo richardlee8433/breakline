@@ -25,9 +25,6 @@ import { STAGES } from '../data/stages'
 import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 import { spawnEnemyDrop } from '../systems/DropSystem'
-import {
-  BURST_MAX, BURST_IGNITE_IFRAMES, BURST_CANCEL_GEMS, MAX_BURST_LEVEL, burstTier,
-} from '../data/burst'
 
 import {
   STAGE_W as W, STAGE_H as H, SPRITE_SCALE,
@@ -66,9 +63,6 @@ export class GameApp {
   private bossCountdown = -1   // >=0: WARNING banner is up, boss enters at 0
   private chainTimer = 0       // kill-chain lapse countdown
   private lastChain = 0
-  private burstHeld = false    // edge-detect the burst key; holding must not retrigger
-  private burstDrainAcc = 0    // batches gauge drain so the HUD isn't re-rendered per frame
-  private burstWasReady = false
 
   constructor(private canvas: HTMLCanvasElement) {
     this.app = new Application()
@@ -223,12 +217,8 @@ export class GameApp {
     this.floats.releaseAll()
     this.player.reset()
     gameStore.getState().resetChain()
-    gameStore.getState().endBurst()   // stops an active burst, keeps the charge
     this.chainTimer = 0
     this.lastChain = 0
-    this.burstDrainAcc = 0
-    this.burstWasReady = false
-    this.burstHeld = false
     this.transitioning = false
     this.bossCountdown = -1
     gameStore.getState().setBossWarning(false)
@@ -262,12 +252,6 @@ export class GameApp {
     if (hitstop.update(dt)) return   // impact freeze-frame
 
     this.input.update()
-    // Capture the burst key's rising edge on the same frame the input is read.
-    // Doing it here rather than at the point of use means a release that lands
-    // while the ticker is bailing out (death, gameover, pause) can never leave
-    // the flag stuck on and swallow the next press.
-    const burstPressed = this.input.actions.burst && !this.burstHeld
-    this.burstHeld = this.input.actions.burst
     this.player.update(dt, this.input.actions)
     if (this.player.consumeJustDied()) this.onPlayerDeath()
 
@@ -279,18 +263,6 @@ export class GameApp {
       if (this.chainTimer <= 0) gameStore.getState().resetChain()
     }
     this.lastChain = gameStore.getState().chain
-
-    // BURST gauge. Drain is flushed at 20 Hz rather than every frame: the
-    // gauge lives in the store, and the HUD re-renders on every write.
-    this.burstDrainAcc += dt
-    if (this.burstDrainAcc >= 0.05) {
-      gameStore.getState().drainBurst(this.burstDrainAcc)
-      this.burstDrainAcc = 0
-    }
-    const burstState = gameStore.getState()
-    const burstReady = burstState.burst >= BURST_MAX && burstState.burstLevel < MAX_BURST_LEVEL
-    if (burstReady && !this.burstWasReady) audioSystem.playBurstReady()
-    this.burstWasReady = burstReady
 
     this.exhaust.update(dt, this.player.x, this.player.y, !this.player.isDead)
     this.bulletTrail.update(this.playerBullets)
@@ -374,11 +346,6 @@ export class GameApp {
     this.shockwave.update(dt)
     this.floats.update(dt)
 
-    // Ignition fires once per press, so a player holding the key through a
-    // full gauge doesn't burn the burst the instant it charges — deciding
-    // *when* to spend it is the whole mechanic.
-    if (burstPressed && !this.player.isDead) this.igniteBurst()
-
     if (this.input.actions.bomb && !this.bombCooldown) {
       if (this.player.inGrace) {
         // Deathbomb: spend a bomb to cancel a pending death
@@ -405,37 +372,6 @@ export class GameApp {
     this.pickups.spawn(this.player.x + 30, this.player.y - 60, droppedWeapon)
     s.loseLife()
     if (s.lives <= 1) s.setPhase('gameover')
-  }
-
-  /**
-   * Spend a full gauge. The activation blast cancels every hostile bullet on
-   * screen and mints gems from them (Crimzon Clover's trick: the reward for
-   * bursting inside a curtain is the curtain itself), then the tier's damage,
-   * fire-rate and score multipliers run until the gauge drains.
-   */
-  private igniteBurst() {
-    const level = gameStore.getState().igniteBurst()
-    if (level === 0) return
-
-    const tier = burstTier(level)
-    this.shockwave.trigger(this.player.x, this.player.y)
-    screenShake.trigger(level >= 2 ? 6 : 4)
-    hitstop.trigger(0.06)
-    audioSystem.playBurstIgnite(level)
-    this.player.grantInvincibility(BURST_IGNITE_IFRAMES)
-    this.floats.spawn(this.player.x, this.player.y - 46, tier.label, tier.tint)
-
-    // Cancelled rounds become score, capped so one activation inside a dense
-    // pattern cannot drain the gem pool out from under later kills.
-    let minted = 0
-    for (const pool of [this.enemyBullets, this.bossBullets]) {
-      for (const b of pool.active) {
-        if (minted >= BURST_CANCEL_GEMS) break
-        this.gems.spawn(b.sprite.x, b.sprite.y, 1)
-        minted++
-      }
-      pool.releaseAll()
-    }
   }
 
   private triggerBomb() {

@@ -4,7 +4,6 @@ import { BulletPool } from './BulletPool'
 import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 import { PLAYFIELD_LEFT, PLAYFIELD_RIGHT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
-import { burstTier } from '../data/burst'
 
 const SPEED = 300 * SPRITE_SCALE
 const PLAYFIELD_CENTER = PLAYFIELD_LEFT + PLAYFIELD_W / 2
@@ -81,7 +80,7 @@ export class Player {
     this.state = 'grace'; this.graceTimer = DEATHBOMB_WINDOW; return true
   }
 
-  /** Brief invincibility from an outside source (the BURST ignition blast). */
+  /** Brief invincibility from an outside source. */
   grantInvincibility(seconds: number) {
     if (this.state !== 'alive') return
     this.invincible = Math.max(this.invincible, seconds)
@@ -133,11 +132,7 @@ export class Player {
     const power = weapon === 'plasma' ? Math.min(4, Math.max(0, state.plasmaPower)) : Math.min(4, Math.max(0, state.power))
     this.firingLaser = fire && weapon === 'laser' && state.laserPower > 0
 
-    // BURST is the only thing that changes the ship's own output: faster
-    // cadence and heavier rounds for as long as the gauge holds.
-    const tier = burstTier(state.burstLevel)
-    const baseRate = weapon === 'plasma' ? PLASMA_FIRE_RATE[power] : VULCAN_FIRE_RATE[power]
-    const rate = baseRate * tier.fireRateMult
+    const rate = weapon === 'plasma' ? PLASMA_FIRE_RATE[power] : VULCAN_FIRE_RATE[power]
     const pattern = weapon === 'plasma' ? PLASMA_PATTERNS[power] : VULCAN_PATTERNS[power]
     this.fireTimer -= dt
     if (fire && weapon !== 'laser' && this.fireTimer <= 0) {
@@ -149,9 +144,9 @@ export class Player {
           ox, oy,
           nx * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED),
           ny * (plasma ? BULLET_SPEED * 0.82 : BULLET_SPEED),
-          (plasma ? 0.55 : 1) * tier.damageMult,
-          tier.tint,
-          (plasma ? 1.1 : 1) * (state.burstLevel > 0 ? 1.25 : 1),
+          plasma ? 0.55 : 1,
+          0xffffff,
+          plasma ? 1.1 : 1,
           plasma ? this.plasmaTexture : undefined,
           plasma, plasma,   // cancelsHostile, penetrates — both Plasma's identity
         )
@@ -160,9 +155,6 @@ export class Player {
     }
 
     if (this.invincible > 0) { this.invincible -= dt; this.flashTimer += dt; this.sprite.alpha = Math.sin(this.flashTimer * 20) > 0 ? 1 : 0.3 } else this.sprite.alpha = 1
-    // Hull runs hot while bursting. Safe to assign unconditionally here: the
-    // grace flash owns the tint in its own branch and returns before this.
-    this.sprite.tint = tier.tint
     this.focusDot.visible = focus
     if (focus) { this.dotPulse += dt; this.focusDot.x = this.sprite.x; this.focusDot.y = this.sprite.y; this.focusDot.scale.set(1 + 0.15 * Math.sin(this.dotPulse * 8)) }
   }

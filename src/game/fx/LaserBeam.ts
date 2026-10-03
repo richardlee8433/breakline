@@ -8,7 +8,6 @@ import { screenShake } from './ScreenShake'
 import { gameStore } from '../../store/gameStore'
 import { PickupPool } from '../entities/Pickup'
 import { spawnEnemyDrop } from '../systems/DropSystem'
-import { burstTier } from '../data/burst'
 
 const DMG_PER_SEC = 30
 // Bosses resist the beam, while laser power restores its single-target scaling.
@@ -70,9 +69,7 @@ export class LaserBeam {
     this.g.circle(playerX, playerY, r)
       .stroke({ color: 0x88ddff, width: 2, alpha: 0.6 * pulse })
 
-    // Continuous damage — BURST scales the beam like it scales every other
-    // weapon, so switching to Laser never costs you the burst payoff.
-    const dmg = DMG_PER_SEC * dt * burstTier(gameStore.getState().burstLevel).damageMult
+    const dmg = DMG_PER_SEC * dt
 
     for (const e of enemies) {
       if (!e.active) continue
