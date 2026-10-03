@@ -198,6 +198,10 @@ export function HUD() {
 
 function TouchButtons() {
   const coreEnabled = useGameStore((s) => s.coreEnabled)
+  const phase = useGameStore((s) => s.phase)
+  // Only in play: over the title they sat on top of the menu, and DASH
+  // (which sends Space) would start a run.
+  if (phase !== 'playing') return null
   const button = (code: string, text: string, bottom: number, size: number, color: string) => (
     <button
       onPointerDown={(e) => { e.stopPropagation(); tapKey(code) }}

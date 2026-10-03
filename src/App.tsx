@@ -50,6 +50,16 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleSound, togglePause])
 
+  // Touch play is one long drag, which mobile browsers read as a text
+  // selection or a long-press: iOS pops its Copy/Look Up callout mid-fight.
+  // Block selection, the long-press menu and pinch-zoom for the whole page.
+  useEffect(() => {
+    const block = (e: Event) => e.preventDefault()
+    const events = ['selectstart', 'contextmenu', 'gesturestart', 'dragstart']
+    for (const ev of events) document.addEventListener(ev, block, { passive: false })
+    return () => { for (const ev of events) document.removeEventListener(ev, block) }
+  }, [])
+
   return (
     <div style={{
       position: 'absolute', width: GAME_W, height: GAME_H,
@@ -59,6 +69,15 @@ export default function App() {
       transformOrigin: 'center center',
       touchAction: 'none',
     }}>
+      {/* iOS Safari honours only the prefixed user-select, and needs
+          touch-callout off to stop the long-press menu. */}
+      <style>{`
+        html, body, #root, #root * {
+          -webkit-user-select: none; user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+      `}</style>
       <canvas
         ref={canvasRef}
         width={GAME_W}

@@ -2,6 +2,11 @@ import { useGameStore } from '../store/gameStore'
 import { COUNTER, ENERGY } from '../game/data/core'
 
 const CYAN = '#33eeff'
+// Touch players use on-screen buttons, so key hints are noise there — and
+// they don't fit the narrow portrait panel.
+const IS_TOUCH = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+const key = (k: string) => (IS_TOUCH ? '' : ` [${k}]`)
 const COUNTER_PCT = (COUNTER.cost / ENERGY.max) * 100
 
 const label = {
@@ -35,7 +40,7 @@ export function CorePanel({ width }: { width: number | string }) {
               color: counterReady ? '#ffffff' : '#3a6f80',
               textShadow: counterReady ? `0 0 8px ${CYAN}` : label.textShadow,
             }}>
-              COUNTER [E]
+              {`COUNTER${key('E')}`}
             </span>
           </div>
           <div style={{ position: 'relative', height: 11, background: 'rgba(255,255,255,0.10)', borderRadius: 4 }}>
@@ -75,13 +80,13 @@ export function CorePanel({ width }: { width: number | string }) {
       <div style={{ display: 'flex', gap: 6 }}>
         {enabled && (
           <Chip
-            text={core.overheated ? 'LOCKED' : core.absorbing ? 'CATCH!' : 'ABSORB [SHIFT]'}
+            text={core.overheated ? 'LOCKED' : core.absorbing ? 'CATCH!' : `ABSORB${key('SHIFT')}`}
             charge={core.overheated ? 0 : core.absorbCharge}
             color={core.overheated ? '#ff3b2f' : CYAN}
             lit={core.absorbing}
           />
         )}
-        <Chip text="DASH [SPACE]" charge={core.dashCharge} color="#b9a6ff" lit={false} />
+         <Chip text={`DASH${key('SPACE')}`} charge={core.dashCharge} color="#b9a6ff" lit={false} />
       </div>
     </div>
   )

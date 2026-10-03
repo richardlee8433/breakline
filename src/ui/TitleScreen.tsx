@@ -69,7 +69,11 @@ export function TitleScreen() {
         {option(true, 'START', 'TAP · SPACE · 1', true)}
         {option(false, 'CONTROL RUN (NO CORE)', 'PLAYTEST A/B · PRESS 2', false)}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); setSettings(true) }}
+          // Open on click (after release), not pointerdown: on touch, the click
+          // that follows the tap would otherwise land on the panel's DONE
+          // button, which sits under the finger, and close it at once.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setSettings(true)}
           style={{
             display: 'block', width: 360, margin: '0 auto', padding: '9px 0',
             fontFamily: 'monospace', letterSpacing: 3, cursor: 'pointer', fontSize: 14,
