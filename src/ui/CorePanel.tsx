@@ -1,5 +1,5 @@
 import { useGameStore } from '../store/gameStore'
-import { COUNTER, ENERGY } from '../game/data/core'
+import { BOMB, ENERGY } from '../game/data/core'
 
 const CYAN = '#33eeff'
 // Touch players use on-screen buttons, so key hints are noise there — and
@@ -7,19 +7,23 @@ const CYAN = '#33eeff'
 const IS_TOUCH = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 const key = (k: string) => (IS_TOUCH ? '' : ` [${k}]`)
-const COUNTER_PCT = (COUNTER.cost / ENERGY.max) * 100
+// One tick per gun level: the bar reads as five steps, not a smooth gauge.
+const LEVEL_TICKS = Array.from({ length: Math.floor(ENERGY.max / ENERGY.perLevel) - 1 },
+  (_, i) => ((i + 1) * ENERGY.perLevel / ENERGY.max) * 100)
 
 const label = {
   fontFamily: 'monospace', fontSize: 13, letterSpacing: 2,
   textShadow: '0 0 4px #000', whiteSpace: 'nowrap' as const,
 }
 
-/** Energy, heat and the two cooldowns. Bars ease with CSS transitions; the
- *  energy bar replays a short pulse on every catch (keyed by catchSerial). */
+/** Energy (gun level + shield), heat, bombs and the two cooldowns. Bars ease
+ *  with CSS transitions; the energy bar replays a short pulse on every catch
+ *  (keyed by catchSerial). */
 export function CorePanel({ width }: { width: number | string }) {
   const core = useGameStore((s) => s.core)
   const enabled = useGameStore((s) => s.coreEnabled)
-  const counterReady = core.energy >= COUNTER.cost
+  const bombs = useGameStore((s) => s.bombs)
+  const shieldUp = core.shield > 0
   const heatColor = core.overheated ? '#ff3b2f' : core.heat > 70 ? '#ff8a33' : '#ffc14d'
 
   return (
@@ -35,12 +39,12 @@ export function CorePanel({ width }: { width: number | string }) {
       {enabled ? (
         <>
           <div style={{ ...label, display: 'flex', justifyContent: 'space-between', color: CYAN }}>
-            <span>ENERGY</span>
+            <span>GUN LV {core.level + 1}</span>
             <span style={{
-              color: counterReady ? '#ffffff' : '#3a6f80',
-              textShadow: counterReady ? `0 0 8px ${CYAN}` : label.textShadow,
+              color: shieldUp ? '#ffffff' : '#3a6f80',
+              textShadow: shieldUp ? `0 0 8px ${CYAN}` : label.textShadow,
             }}>
-              {`COUNTER${key('E')}`}
+              SHIELD {shieldUp ? '◆'.repeat(core.shield) : '—'}
             </span>
           </div>
           <div style={{ position: 'relative', height: 11, background: 'rgba(255,255,255,0.10)', borderRadius: 4 }}>
@@ -48,16 +52,17 @@ export function CorePanel({ width }: { width: number | string }) {
               key={core.catchSerial}
               style={{
                 height: '100%', width: `${core.energy}%`, background: CYAN, borderRadius: 4,
-                boxShadow: counterReady ? `0 0 10px ${CYAN}` : undefined,
+                boxShadow: shieldUp ? `0 0 10px ${CYAN}` : undefined,
                 transition: 'width 0.12s ease-out',
                 animation: core.catchSerial ? 'energyJump 0.22s ease-out' : undefined,
               }}
             />
-            {/* counter threshold tick */}
-            <div style={{
-              position: 'absolute', top: -3, bottom: -3, left: `${COUNTER_PCT}%`, width: 2,
-              background: '#ffffff', opacity: 0.7,
-            }} />
+            {LEVEL_TICKS.map((pct) => (
+              <div key={pct} style={{
+                position: 'absolute', top: -2, bottom: -2, left: `${pct}%`, width: 2,
+                background: '#0b1220', opacity: 0.9,
+              }} />
+            ))}
           </div>
 
           <div style={{ ...label, display: 'flex', justifyContent: 'space-between', color: heatColor }}>
@@ -76,6 +81,11 @@ export function CorePanel({ width }: { width: number | string }) {
       ) : (
         <div style={{ ...label, color: '#667788' }}>CORE OFFLINE · CONTROL RUN</div>
       )}
+
+      <div style={{ ...label, display: 'flex', justifyContent: 'space-between', color: bombs ? '#ffcf5a' : '#6a6050' }}>
+        <span>{`BOMB${key('E')}`}</span>
+        <span style={{ letterSpacing: 4 }}>{'●'.repeat(bombs)}{'○'.repeat(Math.max(0, BOMB.max - bombs))}</span>
+      </div>
 
       <div style={{ display: 'flex', gap: 6 }}>
         {enabled && (

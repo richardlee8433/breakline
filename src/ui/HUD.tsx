@@ -199,6 +199,7 @@ export function HUD() {
 function TouchButtons() {
   const coreEnabled = useGameStore((s) => s.coreEnabled)
   const phase = useGameStore((s) => s.phase)
+  const bombs = useGameStore((s) => s.bombs)
   // Only in play: over the title they sat on top of the menu, and DASH
   // (which sends Space) would start a run.
   if (phase !== 'playing') return null
@@ -220,7 +221,7 @@ function TouchButtons() {
     <>
       {coreEnabled && button('ShiftLeft', 'ABSORB', 18, 76, '#33eeff')}
       {button('Space', 'DASH', coreEnabled ? 104 : 18, 58, '#b9a6ff')}
-      {coreEnabled && button('KeyE', 'COUNTER', 172, 58, '#ffffff')}
+      {bombs > 0 && button('KeyE', `BOMB ${bombs}`, coreEnabled ? 172 : 86, 58, '#ffcf5a')}
     </>
   )
 }

@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Lastlight 同宇宙的短篇縱向卷軸射擊冒險。核心玩法：**吸收 → 轉化 → 反擊**，也就是接住敵方能源彈，存成能源，再釋放成反擊武器。
+Lastlight 同宇宙的短篇縱向卷軸射擊冒險。核心玩法：**吸收 → 火力與護盾**。接住敵方能源彈存成能源，能源同時決定主炮等級和護盾層數。炸彈則由敵機掉落。
 
 - 完整設計：[`docs/Breakline_Game_Plan_v0.1.txt`](docs/Breakline_Game_Plan_v0.1.txt)。名稱、數值、劇情都是暫定。
 - 程式碼從 [neon-raiden](https://github.com/richardlee8433/neon-raiden) fork 出來，渲染、物件池、波次、Boss、音訊都沿用它的基礎。
@@ -34,7 +34,7 @@ src/
     config.ts             # 畫面尺寸、combat corridor、SPRITE_SCALE（載入時算一次）
     core/GameApp.ts       # Pixi Application、主 ticker、能力調度、試玩數據、提示
     data/
-      core.ts             # 吸收 / 能源 / 熱量 / 衝刺 / 反擊的所有數值
+      core.ts             # 吸收 / 能源（等級、護盾）/ 熱量 / 衝刺 / 炸彈的所有數值
       player.ts           # 移動速度、自動射擊、重生
       enemies.ts          # 敵機屬性表（含 bulletKind: energy | missile）
       stages.ts           # ARENA、STORY_STAGES、stageConfig()
@@ -42,7 +42,7 @@ src/
       audio.ts            # 音效清單
     entities/             # Player（含衝刺）, Enemy（HostilePools）, Boss, BulletPool, Pickup, Gem
     systems/
-      CoreSystem.ts       # 能源、熱量、過熱、吸收窗口與冷卻、反擊花費、試玩計數
+      CoreSystem.ts       # 能源→等級與護盾、熱量、過熱、吸收窗口與冷卻、試玩計數
       CollisionSystem.ts  # absorb() 先跑、check() 後跑；damageEnemy / damageBoss 共用擊殺流程
       Input / Wave / Drop / BulletPatterns / Scroll / Audio / Music / SampleBank
     fx/
@@ -64,8 +64,8 @@ docs/                     # 設計文件
 - 計時用 ticker 的 `dt`，不要用 `setTimeout` / `setInterval`。
 
 ### Tick 順序（GameApp.tick）
-1. 讀輸入，對 absorb / dash / counter 做 edge detect。換關時三者都預設為「按住中」，避免開局那一下 Space 直接觸發衝刺。
-2. 衝刺（會取消吸收）→ 開啟吸收 → `player.update` → `core.update` → 反擊。
+1. 讀輸入，對 absorb / dash / bomb 做 edge detect。換關時三者都預設為「按住中」，避免開局那一下 Space 直接觸發衝刺。
+2. 衝刺（會取消吸收）→ 開啟吸收 → `player.update(…, core.level)` → `core.update` → 炸彈。
 3. 子彈和敵機移動 → **`collision.absorb()`** → **`collision.check()`**。順序很重要：同一顆子彈只會有一個結果。
 
 ### Object pooling（強制）
@@ -88,7 +88,15 @@ docs/                     # 設計文件
 
 - **吸收**：按下觸發，窗口 0.6s、冷卻 1.2s，不能按住。判定範圍是機首前方扇形：頂點在機身中心，半角 50°，半徑 105。和機身同高、在側面或後方的子彈**照樣致命**。吸收中暫停普通射擊；衝刺會取消吸收。
 - **能源 / 熱量**：各 0–100。接到彈會同時加能源和熱量，開窗口也會加熱量。停止吸收後才開始散熱。過熱只鎖住吸收，不扣血，射擊和衝刺照常能用。
-- **反擊**：固定花費 30 能源，是全畫面衝擊波（`GameApp.fireCounter`，沿用 neon-raiden 炸彈的做法）。會清空所有能源彈、擊落所有飛彈；畫面內每台敵機受一次傷害，畫面外排隊的不算；Boss 受最大 HP 8% 的傷害。
+- **能源 → 火力與護盾**：每 `ENERGY.perLevel`（20）能源等於一級火力（`PLAYER.shotPattern[level]`）加一層護盾。
+  - `Player.hit()` 會先問 `shieldHook`；有護盾時改由 `GameApp.onShieldHit` 扣一層（`core.breakShield`），給無敵並清掉附近子彈，玩家不會死。
+  - 死亡時呼叫 `core.onDeath()`，能源歸零。
+- **炸彈**：存量在 store 的 `bombs`，0 到 3。
+  - 掉落：`DropSystem.spawnEnemyDrop`，機率掉落，加上 `BOMB.pityKills` 保底；換局時 `resetDrops()`。
+  - 效果：`GameApp.fireBomb`，全畫面衝擊波。清空所有能源彈、擊落所有飛彈；畫面內每台敵機受一次傷害，畫面外排隊的不算；Boss 受最大 HP 8% 的傷害。
+- **教學對話（talk）**：store 的 `talk` 是戰鬥中的對話。
+  - 有 talk 時 GameApp 不 tick 戰鬥、HUD 淡出；結束後三個動作鍵都視為「按住中」，避免用來翻頁的那一下觸發衝刺或炸彈。
+  - 觸發點：`trackRun()`，第一次出現能源彈時；`onBombFound()`，第一次撿到炸彈時。只在故事模式觸發，每局一次。
 - **衝刺**：0.2s、冷卻 2s。可以穿越子彈和飛彈，但**不能**穿越敵機機體和光束（Gunship 雷射）。
 - **Boss 部件**（Phase 2）：每個部件有獨立的 hitbox 和 HP。部件被摧毀時，碰撞和發射**要同時關閉**。
 - **換關清理**：`startStage` 重置能力狀態、敵彈、提示、試玩數據，不能殘留。
@@ -132,7 +140,7 @@ headless Chromium 沒有 GPU，FPS 量不準。比較可靠的方法是：
 
 ## 開發階段
 
-- **Phase 1 戰鬥原型**（完成，待試玩）：測試場地、巡邏無人機（能源彈）、飛彈攔截機，加上自動射擊、衝刺、吸收、全畫面反擊。
+- **Phase 1 戰鬥原型**（完成，待試玩）：測試場地、巡邏無人機（能源彈）、飛彈攔截機，加上自動射擊、衝刺、吸收（升級火力、護盾）、掉落炸彈。
 - **Phase 2**：完整第一關。內容包括教學、短通訊、有兩個可拆炮塔的 Boss、失敗重試。
 - **Phase 3**：三關故事版，含三台 Boss、開場、結局、關卡解鎖。
 - **Phase 4**：打磨。包括手機操作、輔助難度、街機模式和排行榜。
@@ -140,8 +148,8 @@ headless Chromium 沒有 GPU，FPS 量不準。比較可靠的方法是：
 ## Known debt
 
 - 規劃書要求「首次教學在安全區暫停或減速」，目前只有非阻擋式提示。
-- 音效是從現有素材挑的，還沒實際聽過調整：吸收用 `graze-alt` / `gem-alt`，反擊用 `bigshot3`，過熱用 `alarm1`，衝刺用 `smallshot5`。
-- `public/assets` 裡還留著 neon-raiden 沒在用的素材：炸彈、power、laser、plasma 的 pickup 圖和音效。
+- 音效是從現有素材挑的，還沒實際聽過調整：吸收用 `graze-alt` / `gem-alt`，升級用 `pickup-alt`，護盾破裂用 `explosion1`（加速），炸彈用 `bigshot3` + `explosion3`，過熱用 `alarm1`，衝刺用 `smallshot5`。
+- `public/assets` 裡還留著 neon-raiden 沒在用的素材：power、laser、plasma 的 pickup 圖和音效。
 
 ## Don't
 - 不要在 update loop 裡 `console.log`。

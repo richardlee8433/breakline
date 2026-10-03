@@ -4,7 +4,7 @@ import { BulletPool } from './BulletPool'
 import { audioSystem } from '../systems/AudioSystem'
 import { PLAYFIELD_LEFT, PLAYFIELD_RIGHT, PLAYFIELD_W, SPRITE_SCALE } from '../config'
 import { PLAYER } from '../data/player'
-import { DASH } from '../data/core'
+import { DASH, SHIELD } from '../data/core'
 import type { HitCause } from '../../store/gameStore'
 
 const SPEED = PLAYER.speed * SPRITE_SCALE
@@ -27,6 +27,9 @@ export class Player {
   private justDied = false
   /** What caused the most recent death, for the playtest report. */
   lastHitCause: HitCause = 'energy'
+  /** Asked before a hit kills: return true if a shield took it instead.
+   *  GameApp wires this to the core. */
+  shieldHook: ((cause: HitCause) => boolean) | null = null
   private tilt = 0
   private dashTime = 0
   private dashCd = 0
@@ -77,8 +80,14 @@ export class Player {
     return true
   }
 
+  /** A hit connects. Returns true if it landed (the bullet is spent), either
+   *  on the shield or on the ship. */
   hit(cause: HitCause) {
     if (this.state !== 'alive' || this.invincible > 0) return false
+    if (this.shieldHook?.(cause)) {
+      this.invincible = SHIELD.iframes; this.flashTimer = 0
+      return true
+    }
     this.lastHitCause = cause
     this.state = 'dead'; this.justDied = true; this.respawnTimer = PLAYER.respawnDelay
     this.sprite.visible = false; this.dashTime = 0
@@ -101,8 +110,9 @@ export class Player {
     this.sprite.x = PLAYFIELD_CENTER; this.sprite.y = this.stageH * 0.8
   }
 
-  /** `absorbing`: the core's window is open, which pauses the normal shot. */
-  update(dt: number, actions: Actions, absorbing = false) {
+  /** `absorbing`: the core's window is open, which pauses the normal shot.
+   *  `level`: gun level 0–4 from the core's energy. */
+  update(dt: number, actions: Actions, absorbing = false, level = 0) {
     if (this.dashCd > 0) this.dashCd -= dt
     this.updateGhosts(dt)
     if (this.state === 'dead') {
@@ -140,9 +150,10 @@ export class Player {
     // offensive modes are never both running at once.
     this.fireTimer -= dt
     if (this.fireTimer <= 0 && !absorbing) {
-      this.fireTimer = PLAYER.fireInterval
+      const lv = Math.max(0, Math.min(PLAYER.shotPattern.length - 1, level))
+      this.fireTimer = PLAYER.fireInterval[lv]
       const ox = this.sprite.x, oy = this.sprite.y - 20
-      for (const [nx, ny] of PLAYER.shotPattern) {
+      for (const [nx, ny] of PLAYER.shotPattern[lv]) {
         this.bulletPool.acquire(ox, oy, nx * PLAYER.bulletSpeed, ny * PLAYER.bulletSpeed, PLAYER.shotDamage)
       }
       audioSystem.playShoot()

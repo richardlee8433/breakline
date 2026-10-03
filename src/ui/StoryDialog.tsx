@@ -16,12 +16,16 @@ const BOX_BOTTOM = PLAYFIELD_W < STAGE_W ? 64 * SPRITE_SCALE : 28
 // scene. Combat is paused while it is up (GameApp only ticks in 'playing').
 export function StoryDialog() {
   const scene = useGameStore((s) => s.storyScene)
-  if (!scene) return null
-  return <Scene key={scene} id={scene} />
+  const talk = useGameStore((s) => s.talk)
+  const finishScene = useGameStore((s) => s.finishScene)
+  const finishTalk = useGameStore((s) => s.finishTalk)
+  // A between-stage scene (phase 'story') or an in-combat talk.
+  const id = scene ?? talk
+  if (!id) return null
+  return <Scene key={id} id={id} onDone={scene ? finishScene : finishTalk} />
 }
 
-function Scene({ id }: { id: keyof typeof SCENES }) {
-  const finishScene = useGameStore((s) => s.finishScene)
+function Scene({ id, onDone: finishScene }: { id: keyof typeof SCENES; onDone: () => void }) {
   const { heading, lines } = SCENES[id]
   const [i, setI] = useState(0)
   const [shown, setShown] = useState(0)
@@ -65,7 +69,7 @@ function Scene({ id }: { id: keyof typeof SCENES }) {
     >
       <style>{DLG_CSS}</style>
       <div className="dlg-veil" onClick={next} aria-hidden="true" />
-      <div className="dlg-heading" key={heading}>{heading}</div>
+      {heading && <div className="dlg-heading" key={heading}>{heading}</div>}
       <div
         className={'dlg who-' + who + (hasArt ? '' : ' plain')}
         role="dialog"

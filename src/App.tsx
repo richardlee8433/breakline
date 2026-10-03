@@ -14,6 +14,7 @@ export default function App() {
   const gameRef      = useRef<GameApp | null>(null)
   const phase        = useGameStore((s) => s.phase)
   const paused       = useGameStore((s) => s.paused)
+  const talk         = useGameStore((s) => s.talk)
   const toggleSound  = useGameStore((s) => s.toggleSound)
   const togglePause  = useGameStore((s) => s.togglePause)
   const [scale, setScale] = useState(1)
@@ -88,7 +89,7 @@ export default function App() {
           the scene reads better without meters over it. */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        opacity: phase === 'story' ? 0 : 1, transition: 'opacity 0.35s ease',
+        opacity: phase === 'story' || talk ? 0 : 1, transition: 'opacity 0.35s ease',
       }}>
         <HUD />
       </div>
@@ -96,7 +97,7 @@ export default function App() {
       {phase === 'gameover'   && <GameOverScreen />}
       {phase === 'complete'   && <GameOverScreen cleared />}
       {phase === 'stageclear' && <StageClearScreen />}
-      {phase === 'story'      && <StoryDialog />}
+      {(phase === 'story' || talk) && <StoryDialog />}
       {paused && phase === 'playing' && (
         <div
           onClick={togglePause}

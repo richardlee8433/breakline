@@ -11,9 +11,9 @@ export const MUSIC_DIR = './assets/audio/music/'
 export type SfxKey =
   | 'shoot' | 'boss-hurt' | 'player-hit' | 'siren'
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
-  | 'pickup-life'
+  | 'pickup-life' | 'pickup-bomb'
   | 'gem' | 'graze' | 'missile-launch'
-  | 'absorb-open' | 'absorb-catch' | 'counter-ready' | 'counter-fire' | 'counter-blast' | 'overheat' | 'dash'
+  | 'absorb-open' | 'absorb-catch' | 'level-up' | 'shield-break' | 'bomb-fire' | 'bomb-blast' | 'overheat' | 'dash'
 
 export interface SfxDef {
   /** File name inside SFX_DIR. */
@@ -44,20 +44,22 @@ export const SFX: Record<SfxKey, SfxDef> = {
   // ── UI / feedback ──────────────────────────────────────────────────────
   siren:             { src: 'alarm3.ogg',       gain: 0.45 },
   'pickup-life':     { src: 'pickup-life.ogg',  gain: 0.60 },
+  'pickup-bomb':     { src: 'pickup-bomb.ogg',  gain: 0.55 },
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },
   'missile-launch':  { src: 'bigshot1.ogg',     gain: 0.40, throttleMs: 120, detune: 40 },
 
   // ── core ───────────────────────────────────────────────────────────────
-  // Each core event gets its own short, distinct cue (game plan §4/§10):
-  // the window opening, every catch (pitch climbs within one window), the
-  // counter becoming affordable, firing it, and overheating.
+  // Each core event gets its own short, distinct cue: the window opening,
+  // every catch (pitch climbs within one window), the gun gaining a level,
+  // the shield taking a hit, the bomb, and overheating.
   'absorb-open':     { src: 'graze-alt.ogg',    gain: 0.30 },
   'absorb-catch':    { src: 'gem-alt.ogg',      gain: 0.34, throttleMs: 30 },
-  'counter-ready':   { src: 'pickup-alt.ogg',   gain: 0.42, throttleMs: 600 },
-  'counter-fire':    { src: 'bigshot3.ogg',     gain: 0.80 },
-  // The old bomb's explosion, layered under the release: a full-screen hit.
-  'counter-blast':   { src: 'explosion3.ogg',   gain: 0.70 },
+  'level-up':        { src: 'pickup-alt.ogg',   gain: 0.42, throttleMs: 300 },
+  'shield-break':    { src: 'explosion1.ogg',   gain: 0.55 },
+  'bomb-fire':       { src: 'bigshot3.ogg',     gain: 0.80 },
+  // neon-raiden's bomb explosion, layered under the release.
+  'bomb-blast':      { src: 'explosion3.ogg',   gain: 0.70 },
   overheat:          { src: 'alarm1.ogg',       gain: 0.40, throttleMs: 800 },
   dash:              { src: 'smallshot5.ogg',   gain: 0.30, detune: 60 },
 }

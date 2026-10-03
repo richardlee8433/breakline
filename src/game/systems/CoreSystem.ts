@@ -1,15 +1,18 @@
-import { ABSORB, ENERGY, HEAT, COUNTER } from '../data/core'
+import { ABSORB, ENERGY, HEAT, SHIELD } from '../data/core'
 import { audioSystem } from './AudioSystem'
+
+export const MAX_LEVEL = 4
 
 /**
  * The alien core's resources and its absorb window. Pure game-side state:
  * GameApp mirrors it into the store at a throttled rate for the HUD.
  *
- * Rules (game plan §4):
+ * Rules:
  * - absorb is press-to-trigger, with a fixed window and a cooldown after it
  * - each catch adds energy AND heat; heat cools after a short delay
  * - overheating locks absorb only — the gun and the dash keep working
- * - a counter spends a fixed amount of energy
+ * - every ENERGY.perLevel of energy is one gun level and one shield layer;
+ *   a hit the shield blocks costs one layer (and so one gun level)
  */
 export class CoreSystem {
   /** false = control build for A/B playtests: the core is switched off. */
@@ -20,14 +23,13 @@ export class CoreSystem {
 
   private window = 0         // seconds left in the open absorb window
   private cooldown = 0       // absorb cooldown
-  private counterCd = 0
   private coolDelay = 0
   private catchesThisWindow = 0
 
   /** Bumped on every catch so the HUD can replay its "energy jump" pulse. */
   catchSerial = 0
   /** Per-run counts for the playtest report. */
-  tally = { windows: 0, whiffs: 0, catches: 0, counters: 0, overheats: 0 }
+  tally = { windows: 0, whiffs: 0, catches: 0, overheats: 0, shieldBlocks: 0, peakLevel: 0 }
 
   get absorbing() { return this.window > 0 }
   get absorbReady() {
@@ -38,20 +40,25 @@ export class CoreSystem {
     if (this.window > 0) return 0
     return 1 - Math.max(0, this.cooldown) / ABSORB.cooldown
   }
-  get counterReady() {
-    return this.enabled && this.energy >= COUNTER.cost && this.counterCd <= 0
+  /** Gun level 0–4, straight from stored energy. */
+  get level() {
+    return this.enabled ? Math.min(MAX_LEVEL, Math.floor(this.energy / ENERGY.perLevel)) : 0
+  }
+  /** Shield layers up (each blocks one hit). */
+  get shieldLayers() {
+    return this.enabled ? Math.floor(this.energy / SHIELD.cost) : 0
   }
 
   reset() {
     this.energy = 0; this.heat = 0; this.overheated = false
-    this.window = 0; this.cooldown = 0; this.counterCd = 0; this.coolDelay = 0
+    this.window = 0; this.cooldown = 0; this.coolDelay = 0
     this.catchesThisWindow = 0
   }
 
   /** Playtest counts span a whole run, so they reset separately from the
    *  per-stage state above. */
   resetTally() {
-    this.tally = { windows: 0, whiffs: 0, catches: 0, counters: 0, overheats: 0 }
+    this.tally = { windows: 0, whiffs: 0, catches: 0, overheats: 0, shieldBlocks: 0, peakLevel: 0 }
   }
 
   /** Try to open the window. Returns false if absorb is unavailable. */
@@ -73,23 +80,34 @@ export class CoreSystem {
 
   /** One absorbable round caught in the window. */
   catchRound() {
-    const before = this.energy
+    const before = this.level
     this.energy = Math.min(ENERGY.max, this.energy + ENERGY.perCatch)
     this.catchesThisWindow++
     this.catchSerial++
     this.tally.catches++
     audioSystem.playAbsorbCatch(this.catchesThisWindow)
-    if (before < COUNTER.cost && this.energy >= COUNTER.cost) audioSystem.playCounterReady()
+    if (this.level > before) {
+      audioSystem.playLevelUp()
+      this.tally.peakLevel = Math.max(this.tally.peakLevel, this.level)
+    }
     this.addHeat(HEAT.perCatch)
   }
 
-  /** Spend energy for one counter shot. Returns false if not affordable. */
-  spendCounter(): boolean {
-    if (!this.counterReady) return false
-    this.energy -= COUNTER.cost
-    this.counterCd = COUNTER.cooldown
-    this.tally.counters++
+  /** A hit landed while a shield layer was up: spend the layer instead of
+   *  the ship. Returns false if there was no shield to spend. */
+  breakShield(): boolean {
+    if (this.shieldLayers <= 0) return false
+    this.energy = Math.max(0, this.energy - SHIELD.cost)
+    this.tally.shieldBlocks++
+    audioSystem.playShieldBreak()
     return true
+  }
+
+  /** The ship was destroyed: whatever energy was left (less than one layer)
+   *  goes with it. */
+  onDeath() {
+    this.energy = 0
+    this.cancelAbsorb()
   }
 
   update(dt: number) {
@@ -99,7 +117,6 @@ export class CoreSystem {
     } else if (this.cooldown > 0) {
       this.cooldown -= dt
     }
-    if (this.counterCd > 0) this.counterCd -= dt
 
     // Heat only bleeds off once absorbing stops (and a beat after the last gain).
     if (this.coolDelay > 0) this.coolDelay -= dt

@@ -19,12 +19,13 @@ export const SPEAKERS: Record<Speaker, { name: string; color: string }> = {
 }
 
 export interface Scene {
-  /** Shown above the dialog box: the stage about to start, or the ending. */
+  /** Shown above the dialog box: the stage about to start, or the ending.
+   *  Empty for in-combat talks. */
   heading: string
   lines: [Speaker, string][]
 }
 
-export type SceneId = 'stage1' | 'stage2' | 'stage3' | 'ending'
+export type SceneId = 'stage1' | 'stage2' | 'stage3' | 'ending' | 'tut-absorb' | 'tut-bomb'
 
 export const SCENES: Record<SceneId, Scene> = {
   // §8 Stage 1 — break the patrol line: meet the evacuation ship and get it
@@ -39,9 +40,8 @@ export const SCENES: Record<SceneId, Scene> = {
       ['kai', '審查？我只是個送貨的。貨單上寫的是「一船科學家」。'],
       ['rosa', '凱，別鬧了。他們要的是撤離船上那枚核心，不是你的貨單。'],
       ['kai', '那妳裝在我飛機上的那顆小的……到底能不能用？'],
-      ['rosa', '它不是在充電。它是把對方的炮火當充電器。看到青色的圓環，就按吸收。'],
-      ['rosa', '橘色的飛彈不行，那是實心的。別拿機頭去接。'],
-      ['kai', '所以這次總算不是我把機器用錯了？'],
+      ['rosa', '能用。等一下開打，我在頻道上一步一步教你。'],
+      ['kai', '邊飛邊上課。好極了。'],
       ['halt', '倒數三秒。三、二——'],
       ['kai', '撤離船，跟緊我。我們走。'],
     ],
@@ -74,6 +74,33 @@ export const SCENES: Record<SceneId, Scene> = {
       ['kai', '那就讓它離開。撤離船，等我打開缺口，就全速衝過去。'],
     ],
   },
+  // ── In-combat talks (story mode): the engineer explains a mechanic the
+  // first time it matters. Combat pauses underneath.
+  // First energy rounds on screen: how absorbing works and what it buys.
+  'tut-absorb': {
+    heading: '',
+    lines: [
+      ['rosa', '凱，看到那些青色的圓環了嗎？那是能源彈，核心吃得下。'],
+      ['rosa', '按吸收（鍵盤是 Shift），核心會在機首前方張開扇形的捕捉場，大約半秒。正前方的能源彈會被吸進來。'],
+      ['rosa', '吸進來的能量直接灌進主炮。吸得越多，火力越強，最多四級。'],
+      ['rosa', '能量夠的時候，核心還會在機身外撐起一層護盾。被打中一次，護盾替你擋下來，代價是掉一級火力。'],
+      ['kai', '所以吸得越多，打得越兇，也越耐打。'],
+      ['rosa', '對。但側面和後面接不到，橘色的飛彈也接不了。一直吸還會過熱，過熱就只能等它散熱。'],
+      ['kai', '了解。張嘴、吃子彈、別吃到飛彈。'],
+      ['rosa', '……我不會這樣形容，但大致上沒錯。'],
+    ],
+  },
+  // First bomb picked up: what it is and why to save it.
+  'tut-bomb': {
+    heading: '',
+    lines: [
+      ['rosa', '等等，你剛剛撿到的那個……是赫利昂的震波彈匣！'],
+      ['rosa', '我把它接上核心了。按炸彈（鍵盤是 E），它會從機身炸開一圈震波：整個畫面的子彈清空、飛彈全部引爆，敵機也會挨一記。'],
+      ['kai', '這種好東西，妳怎麼不早點給我？'],
+      ['rosa', '因為它不是我的，是從敵機身上掉下來的。最多只能帶三顆，留著救命用。'],
+    ],
+  },
+
   // Ending: the flagship loses the ability to hold the line; the evacuation
   // ship gets out. One trait of the core is revealed, nothing more (§2).
   ending: {

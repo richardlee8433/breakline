@@ -78,15 +78,18 @@ function buttonStyle(color: string) {
 
 function ReportTable({ r }: { r: RunReport }) {
   const deaths = r.deaths.energy + r.deaths.missile + r.deaths.hull + r.deaths.beam
+  const bombs: [string, string | number] = ['BOMBS', `${r.bombsUsed} USED / ${r.bombsFound} FOUND  (${r.bombKills} KILLS)`]
   const rows: [string, string | number][] = r.mode === 'core' ? [
     ['ABSORB WINDOWS', `${r.windows}  (${r.whiffs} EMPTY)`],
     ['ROUNDS CAUGHT', r.catches],
-    ['COUNTERS FIRED', `${r.counters}  (${r.counterKills} KILLS)`],
+    ['PEAK GUN LEVEL', r.peakLevel + 1],
+    ['HITS ON SHIELD', r.shieldBlocks],
     ['OVERHEATS', `${r.overheats}  (${r.overheatSeconds}s LOCKED)`],
-    ['COUNTER READY, UNUSED', `${r.readyIdleSeconds}s`],
+    bombs,
     ['DASHES', r.dashes],
     ['DEATHS', `${deaths}  (${r.deathsWhileAbsorbing} WHILE ABSORBING)`],
   ] : [
+    bombs,
     ['DASHES', r.dashes],
     ['DEATHS', deaths],
   ]

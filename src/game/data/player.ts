@@ -12,11 +12,18 @@ export const PLAYER = {
   respawnFlySpeed: 300,
   respawnInvincible: 3,
 
-  // Normal shot: always on (auto-fire), never upgraded. Breakline's power
-  // curve lives in the core's counter-attack, not in the gun.
+  // Normal shot: always on (auto-fire). Its level comes from the core's
+  // energy (ENERGY.perLevel per level), not from pickups.
   bulletSpeed: 620,
-  fireInterval: 0.12,
   shotDamage: 1,
-  /** Unit direction vectors, one bullet each per volley. */
-  shotPattern: [[-0.10, -0.995], [0, -1], [0.10, -0.995]] as [number, number][],
+  /** Seconds between volleys, per level 0–4. */
+  fireInterval: [0.14, 0.13, 0.12, 0.10, 0.08],
+  /** Unit direction vectors per level 0–4, one bullet each per volley. */
+  shotPattern: [
+    [[0, -1]],
+    [[-0.07, -1], [0.07, -1]],
+    [[-0.10, -0.995], [0, -1], [0.10, -0.995]],
+    [[-0.14, -0.99], [-0.04, -1], [0.04, -1], [0.14, -0.99]],
+    [[-0.16, -0.987], [-0.08, -0.997], [0, -1], [0.08, -0.997], [0.16, -0.987]],
+  ] as [number, number][][],
 }

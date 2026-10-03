@@ -43,7 +43,7 @@ class AudioSystem {
 
   /** Settings screen: a short, recognisable cue to judge the SFX level by. */
   playPreview() {
-    this.fire(SFX['counter-ready'])
+    this.fire(SFX['level-up'])
   }
 
   // ── weapons ─────────────────────────────────────────────────────────────
@@ -61,13 +61,18 @@ class AudioSystem {
     this.fire(SFX['absorb-catch'], Math.pow(2, Math.min(nth - 1, 12) / 12))
   }
 
-  playCounterReady() {
-    this.fire(SFX['counter-ready'])
+  playLevelUp() {
+    this.fire(SFX['level-up'])
   }
 
-  playCounterFire() {
-    this.fire(SFX['counter-fire'])
-    this.fire(SFX['counter-blast'])
+  /** A sharp, high crack: the shield took the hit instead of the ship. */
+  playShieldBreak() {
+    this.fire(SFX['shield-break'], 1.6)
+  }
+
+  playBomb() {
+    this.fire(SFX['bomb-fire'])
+    this.fire(SFX['bomb-blast'])
   }
 
   playOverheat() {
@@ -101,8 +106,8 @@ class AudioSystem {
   }
 
   // ── pickups & feedback ──────────────────────────────────────────────────
-  playPickup() {
-    this.fire(SFX['pickup-life'])
+  playPickup(type: 'life' | 'bomb') {
+    this.fire(type === 'bomb' ? SFX['pickup-bomb'] : SFX['pickup-life'])
   }
 
   /** Collect chime climbing one semitone per consecutive gem, as before. */

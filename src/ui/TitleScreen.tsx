@@ -90,8 +90,8 @@ export function TitleScreen() {
       <div style={{ marginTop: 24, fontSize: 13, color: '#778', lineHeight: 1.9, textAlign: 'center' }}>
         MOVE: ARROW KEYS / WASD &nbsp;·&nbsp; FIRE: AUTO<br />
         <span style={{ color: '#33eeff' }}>ABSORB: SHIFT</span> &nbsp;·&nbsp;
-        DASH: SPACE &nbsp;·&nbsp; COUNTER: E<br />
-        <span style={{ color: '#33eeff' }}>◯ CYAN RINGS: ABSORB</span> &nbsp;·&nbsp;
+        DASH: SPACE &nbsp;·&nbsp; BOMB: E<br />
+        <span style={{ color: '#33eeff' }}>◯ CYAN RINGS: ABSORB → GUN + SHIELD</span> &nbsp;·&nbsp;
         <span style={{ color: '#ff6a33' }}>▲ ORANGE MISSILES: DODGE</span><br />
         PAUSE: P / ESC
       </div>

@@ -3,7 +3,7 @@ import { gameStore } from '../../store/gameStore'
 import { audioSystem } from '../systems/AudioSystem'
 import { SPRITE_SCALE } from '../config'
 
-export type PickupType = 'oneup'
+export type PickupType = 'oneup' | 'bomb'
 
 interface PickupInstance {
   sprite: Sprite
@@ -16,10 +16,13 @@ const COLLECT_RADIUS = 28 * SPRITE_SCALE
 
 export class PickupPool {
   private pool: PickupInstance[] = []
+  /** Called after a pickup is collected (GameApp: first-bomb tutorial). */
+  onCollect: ((type: PickupType) => void) | null = null
 
   constructor(
     private container: Container,
     private texOneUp: Texture,
+    private texBomb: Texture,
     size = 20,
   ) {
     for (let i = 0; i < size; i++) {
@@ -39,7 +42,7 @@ export class PickupPool {
     if (!inst) return
     inst.active = true
     inst.type = type
-    inst.sprite.texture = this.texOneUp
+    inst.sprite.texture = type === 'bomb' ? this.texBomb : this.texOneUp
     inst.sprite.x = x
     inst.sprite.y = y
     inst.sprite.alpha = 1
@@ -55,10 +58,12 @@ export class PickupPool {
       const dx = inst.sprite.x - playerX
       const dy = inst.sprite.y - playerY
       if (dx * dx + dy * dy < COLLECT_RADIUS * COLLECT_RADIUS) {
-        gameStore.getState().addLife()
-        audioSystem.playPickup()
+        if (inst.type === 'bomb') gameStore.getState().addBomb()
+        else gameStore.getState().addLife()
+        audioSystem.playPickup(inst.type === 'bomb' ? 'bomb' : 'life')
         inst.active = false
         inst.sprite.visible = false
+        this.onCollect?.(inst.type)
         continue
       }
 

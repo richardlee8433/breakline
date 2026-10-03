@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { GameMode } from '../game/data/stages'
 import type { SceneId } from '../game/data/story'
+import { BOMB } from '../game/data/core'
 
 /** Chain length → score multiplier tier. */
 export function chainMult(chain: number): number {
@@ -16,19 +17,21 @@ export interface CoreView {
   absorbCharge: number  // 0 = just used, 1 = ready
   dashCharge: number    // 0 = just used, 1 = ready
   catchSerial: number   // bumps on each catch; drives the energy-bar pulse
+  level: number         // gun level 0–4
+  shield: number        // shield layers up
 }
 
 const freshCore: CoreView = {
   energy: 0, heat: 0, overheated: false, absorbing: false,
-  absorbCharge: 1, dashCharge: 1, catchSerial: 0,
+  absorbCharge: 1, dashCharge: 1, catchSerial: 0, level: 0, shield: 0,
 }
 
 export type HitCause = 'energy' | 'missile' | 'hull' | 'beam'
 
 /**
  * One run's playtest metrics (game plan §14): enough to spot side-hits
- * while absorbing, whiffed windows, dead time while overheated, and energy
- * left sitting unspent.
+ * while absorbing, whiffed windows, dead time while overheated, and how
+ * much the shield and bombs carried the run.
  */
 export interface RunReport {
   mode: 'core' | 'control'
@@ -38,11 +41,13 @@ export interface RunReport {
   windows: number        // absorb windows opened
   whiffs: number         // windows that caught nothing
   catches: number        // rounds absorbed
-  counters: number       // counter shots fired
-  counterKills: number   // enemies killed by counter blasts
+  peakLevel: number      // highest gun level reached
+  shieldBlocks: number   // hits the shield took instead of the ship
+  bombsFound: number
+  bombsUsed: number
+  bombKills: number
   overheats: number
   overheatSeconds: number
-  readyIdleSeconds: number  // time spent with a counter affordable but unused
   dashes: number
   deaths: Record<HitCause, number>
   deathsWhileAbsorbing: number
@@ -57,12 +62,15 @@ interface GameState {
   chain: number
   loop: number   // playthrough number; enemies get faster each loop
   lives: number
+  bombs: number
   stage: number
   /** title → (story ↔ playing → stageclear)… → complete | gameover */
   phase: 'title' | 'story' | 'playing' | 'stageclear' | 'gameover' | 'complete'
   mode: GameMode
   /** The dialog playing while phase is 'story'. */
   storyScene: SceneId | null
+  /** A short in-combat conversation (tutorials). Combat pauses under it. */
+  talk: SceneId | null
   bossHp: number
   bossMaxHp: number
   bossActive: boolean
@@ -95,6 +103,12 @@ interface GameState {
   finishScene: () => void
   /** Story mode game over: replay the same stage, no dialog (plan §9). */
   retryStage: () => void
+  playTalk: (scene: SceneId) => void
+  finishTalk: () => void
+  /** Returns false when the stock is full. */
+  addBomb: () => boolean
+  /** Returns false when there is none to use. */
+  useBomb: () => boolean
   setBossHp: (hp: number, max: number) => void
   setBossActive: (v: boolean) => void
   setBossWarning: (v: boolean) => void
@@ -107,8 +121,10 @@ interface GameState {
 const freshPlay = {
   score: 0, graze: 0, chain: 0, loop: 1,
   lives: 3,
+  bombs: BOMB.start,
   stage: 1, phase: 'playing' as GameState['phase'],
   storyScene: null as SceneId | null,
+  talk: null as SceneId | null,
   bossHp: 0, bossMaxHp: 1, bossActive: false, bossWarning: false,
   paused: false,
   core: freshCore,
@@ -236,8 +252,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     return { phase: 'playing', storyScene: null }
   }),
+  playTalk: (talk) => set({ talk }),
+  finishTalk: () => set((s) => (s.talk ? { talk: null } : s)),
+  addBomb: () => {
+    if (get().bombs >= BOMB.max) return false
+    set((s) => ({ bombs: s.bombs + 1 }))
+    return true
+  },
+  useBomb: () => {
+    if (get().bombs <= 0) return false
+    set((s) => ({ bombs: s.bombs - 1 }))
+    return true
+  },
   retryStage: () => set({
-    lives: freshPlay.lives, chain: 0, phase: 'playing', paused: false,
+    lives: freshPlay.lives, chain: 0, phase: 'playing', paused: false, talk: null,
     bossActive: false, bossWarning: false, report: null,
   }),
   setBossHp: (hp, max) => set({ bossHp: hp, bossMaxHp: max }),
@@ -259,7 +287,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     return { soundEnabled }
   }),
   togglePause: () => set((s) => {
-    if (s.phase !== 'playing') return s   // pausing only makes sense mid-game
+    // Pausing only makes sense mid-game, and not over a conversation.
+    if (s.phase !== 'playing' || s.talk) return s
     return { paused: !s.paused }
   }),
 }))

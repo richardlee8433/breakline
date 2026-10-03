@@ -1,5 +1,6 @@
-// The core: absorb → convert → counter. Every number here is a prototype
-// starting point from the game plan (§4), not a finished balance table.
+// The core: absorb energy → power the gun and a shield. Bombs are separate:
+// they drop from enemies. Every number here is a prototype starting point,
+// not a finished balance table.
 // Lengths are base (480-wide) pixels; callers scale them by SPRITE_SCALE.
 
 export const ABSORB = {
@@ -18,7 +19,20 @@ export const ABSORB = {
 
 export const ENERGY = {
   max: 100,
-  perCatch: 8,
+  perCatch: 5,
+  /** Every full step of this much energy is one gun level AND one shield
+   *  layer: absorbing makes the ship hit harder and last longer at once. */
+  perLevel: 20,
+}
+
+export const SHIELD = {
+  /** A blocked hit costs one level's worth of energy (gun drops a level). */
+  cost: ENERGY.perLevel,
+  /** Invulnerability after the shield takes a hit. */
+  iframes: 1.2,
+  /** Hostile fire this close is wiped when the shield breaks, so the hit
+   *  that broke it isn't followed by its neighbours on the next frame. */
+  clearRadius: 70,
 }
 
 export const HEAT = {
@@ -39,16 +53,22 @@ export const DASH = {
   distance: 150,
 }
 
-export const COUNTER = {
-  /** Fixed cost per shot: one decision, one resource. */
-  cost: 30,
+export const BOMB = {
+  /** Bombs are found, not owned: none at the start, dropped by enemies. */
+  start: 0,
+  max: 3,
+  /** Per enemy kill. */
+  dropChance: 0.04,
+  /** If no bomb has dropped by this many kills in a run, the next kill drops
+   *  one, so the first-bomb tutorial is never left to chance. */
+  pityKills: 12,
   /** Same lockout neon-raiden's bomb had, so blasts can't be chained. */
   cooldown: 0.8,
-  /** Screen-wide blast, like the old bomb: every on-screen enemy takes
-   *  this once. A drone (8 HP) dies; a missileer (16 HP) needs two. */
+  /** Screen-wide blast: every on-screen enemy takes this once.
+   *  A drone (8 HP) dies; a missileer (16 HP) needs two. */
   damage: 10,
   /** Bosses take a share of max HP rather than a flat number, so the blast
-   *  stays meaningful when boss HP is retuned (the bomb's rule). */
+   *  stays meaningful when boss HP is retuned. */
   bossDamageFrac: 0.08,
   bossMinDamage: 5,
 }
