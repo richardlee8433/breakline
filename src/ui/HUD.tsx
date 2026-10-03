@@ -210,7 +210,7 @@ function TouchButtons() {
         background: `${color}33`, border: `2px solid ${color}`, color: '#fff',
         fontFamily: 'monospace', fontSize: 11, letterSpacing: 1,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        userSelect: 'none', touchAction: 'none', zIndex: 10,
+        userSelect: 'none', touchAction: 'none', zIndex: 10, pointerEvents: 'auto',
       }}
     >
       {text}

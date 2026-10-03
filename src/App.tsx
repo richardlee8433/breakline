@@ -84,7 +84,14 @@ export default function App() {
         height={GAME_H}
         style={{ display: 'block', touchAction: 'none', imageRendering: 'pixelated' }}
       />
-      <HUD />
+      {/* The HUD steps back while a story scene plays: combat is paused, and
+          the scene reads better without meters over it. */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        opacity: phase === 'story' ? 0 : 1, transition: 'opacity 0.35s ease',
+      }}>
+        <HUD />
+      </div>
       {phase === 'title'      && <TitleScreen />}
       {phase === 'gameover'   && <GameOverScreen />}
       {phase === 'complete'   && <GameOverScreen cleared />}

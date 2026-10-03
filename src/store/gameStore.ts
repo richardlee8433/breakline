@@ -225,8 +225,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     ...(mode === 'story' ? { phase: 'story' as const, storyScene: 'stage1' as const } : {}),
   })),
   playScene: (scene) => set({ phase: 'story', storyScene: scene, paused: false, bossActive: false, bossWarning: false }),
+  // No-op branches return the state itself, not {}: zustand skips notifying
+  // when the state object is unchanged, while {} would re-render every
+  // subscriber for nothing.
   finishScene: () => set((s) => {
-    if (s.phase !== 'story') return {}
+    if (s.phase !== 'story') return s
     if (s.storyScene === 'ending') {
       saveHiScore(s.hiScore)
       return { phase: 'complete', storyScene: null }
@@ -256,7 +259,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     return { soundEnabled }
   }),
   togglePause: () => set((s) => {
-    if (s.phase !== 'playing') return {}   // pausing only makes sense mid-game
+    if (s.phase !== 'playing') return s   // pausing only makes sense mid-game
     return { paused: !s.paused }
   }),
 }))

@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { SCENES, SPEAKERS } from '../game/data/story'
 import { portraitURL, PORTRAITS, PortraitId } from '../art/portraits'
 import { PLAYFIELD_LEFT, PLAYFIELD_W, SPRITE_SCALE, STAGE_W } from '../game/config'
 
 const CPS = 28   // characters typed per second (Lastlight's zh rate)
-// Portrait layout keeps the core panel in the bottom-left corner, so the box
-// sits above it there; landscape moves that panel out to the side wing.
-const BOX_BOTTOM = PLAYFIELD_W < STAGE_W ? 64 * SPRITE_SCALE : 150
+// Low on the screen, visual-novel style. Combat is paused and the HUD fades
+// out while a scene plays, so nothing underneath needs to stay visible.
+const BOX_BOTTOM = PLAYFIELD_W < STAGE_W ? 64 * SPRITE_SCALE : 28
 
 // Story dialog, ported from Lastlight (lastlight-colony src/ui/Dialog.tsx +
 // the .dlg rules in styles.css): a bust portrait overlapping the bottom-left
@@ -39,15 +39,21 @@ function Scene({ id }: { id: keyof typeof SCENES }) {
     if (i + 1 < lines.length) { setI(i + 1); setShown(0) } else finishScene()
   }
 
+  // Attach the key listener once and reach the latest `next` through a ref.
+  // Re-attaching it on every render (the obvious way) loses keys: another
+  // keydown handler can update the store mid-dispatch, React re-renders
+  // synchronously, and a listener removed during dispatch is never called.
+  const nextRef = useRef(next)
+  nextRef.current = next
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return
-      if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); next() }
+      if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); nextRef.current() }
       if (e.code === 'Escape') finishScene()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [finishScene])
 
   const hasArt = who in PORTRAITS
   const speaker = SPEAKERS[who]
