@@ -1,6 +1,9 @@
-import { useGameStore, chainMult } from '../store/gameStore'
+import { useGameStore } from '../store/gameStore'
 import { STAGE_W, PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT } from '../game/config'
-import { CorePanel } from './CorePanel'
+import { stageConfig } from '../game/data/stages'
+import { HULL } from '../game/data/chase'
+import { SPEAKERS } from '../game/data/story'
+import { EmpPanel } from './EmpPanel'
 
 const IS_TOUCH = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0)
@@ -19,60 +22,59 @@ function tapKey(code: string) {
 const IS_WIDE = PLAYFIELD_W < STAGE_W
 const WING_W = PLAYFIELD_LEFT
 
+const mono = {
+  color: '#fff', fontFamily: 'monospace', fontSize: 13,
+  pointerEvents: 'none' as const, userSelect: 'none' as const,
+  textShadow: '0 0 4px #000',
+}
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+/** Hull, the stage clock and objective, the EMP gauge (design v0.2 §5). */
 export function HUD() {
-  const { score, hiScore, graze, chain, loop, lives,
-          bossActive, bossHp, bossMaxHp, bossWarning,
-          soundEnabled, toggleSound } = useGameStore()
-  const mult = chainMult(chain)
-  const chainColor = mult >= 8 ? '#ff44aa' : mult >= 4 ? '#ff9933'
-                   : mult >= 2 ? '#ffee44' : '#cccccc'
-  const mono = {
-    color: '#fff', fontFamily: 'monospace', fontSize: 13,
-    pointerEvents: 'none' as const, userSelect: 'none' as const,
-    textShadow: '0 0 4px #000',
-  }
+  const { hull, timeLeft, duration, stage, soundEnabled, toggleSound } = useGameStore()
+  const mission = stageConfig(stage).mission
+  const urgent = timeLeft <= 10
+  const progress = Math.min(1, Math.max(0, 1 - timeLeft / duration))
 
   const soundButton = (
     <button
-      // Blur after click so a focused button doesn't get re-triggered
-      // by the spacebar (which is a game key).
+      // Blur after click so a focused button isn't re-triggered by Space,
+      // which is a game key.
       onClick={(e) => { toggleSound(); e.currentTarget.blur() }}
       onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault() }}
       title="Toggle sound (M)"
       style={{
-        pointerEvents: 'all',
-        background: 'rgba(0,0,0,0.5)',
-        border: '1px solid #444',
-        borderRadius: 4,
-        color: '#fff',
-        cursor: 'pointer',
-        fontFamily: 'monospace',
-        fontSize: 13,
-        lineHeight: 1,
-        padding: '2px 6px',
-        userSelect: 'none',
+        pointerEvents: 'all', background: 'rgba(0,0,0,0.5)', border: '1px solid #444', borderRadius: 4,
+        color: '#fff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, lineHeight: 1,
+        padding: '2px 6px', userSelect: 'none',
       }}
     >
       {soundEnabled ? '🔊' : '🔇'}
     </button>
   )
 
-  const grazeLine = (
-    <div style={{ ...mono, color: '#cc88ff', fontSize: 11 }}>
-      GRAZE {graze}{loop > 1 ? `  ·  LOOP ${loop}` : ''}
-    </div>
+  const hullPips = (
+    <span style={{ letterSpacing: 3 }}>
+      <span style={{ color: '#8899aa', letterSpacing: 2, marginRight: 6 }}>HULL</span>
+      <span style={{ color: hull <= 1 ? '#ff5544' : '#ffd25a' }}>{'◆'.repeat(hull)}</span>
+      <span style={{ color: '#4a4f5c' }}>{'◇'.repeat(Math.max(0, HULL.max - hull))}</span>
+    </span>
   )
 
-  const chainLine = chain >= 2 && (
-    <div style={{
-      ...mono,
-      color: chainColor,
-      fontSize: mult > 1 ? 14 : 11,
-      fontWeight: 'bold',
-      textShadow: `0 0 6px ${chainColor}`,
-      transition: 'font-size 0.15s',
+  const timer = (size: number) => (
+    <span style={{
+      fontSize: size, fontWeight: 'bold', letterSpacing: 2, fontVariantNumeric: 'tabular-nums',
+      color: urgent ? '#ffdd55' : '#ffffff',
+      textShadow: urgent ? '0 0 12px #ffaa00' : '0 0 8px #0088ff',
     }}>
-      ×{mult} CHAIN {chain}
+      {clock(timeLeft)}
+    </span>
+  )
+
+  const progressBar = (
+    <div style={{ height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${progress * 100}%`, background: '#7ff3ff', transition: 'width 0.3s linear' }} />
     </div>
   )
 
@@ -80,177 +82,116 @@ export function HUD() {
     <>
       {IS_WIDE ? (
         <>
-          {/* Left wing: score & scoring state */}
+          {/* Left wing: the objective and the clock */}
           <div style={{
-            position: 'absolute', top: 14, left: 0, width: WING_W,
-            padding: '0 14px', boxSizing: 'border-box',
-            display: 'flex', flexDirection: 'column', gap: 7,
-            alignItems: 'flex-start', ...mono,
+            position: 'absolute', top: 14, left: 0, width: WING_W, padding: '0 14px', boxSizing: 'border-box',
+            display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start', ...mono,
           }}>
-            <span>SCORE {String(score).padStart(6, '0')}</span>
-            <span style={{ color: '#aab' }}>HI {String(hiScore).padStart(6, '0')}</span>
-            {grazeLine}
-            {chainLine}
+            <span style={{ color: '#88aacc', letterSpacing: 3 }}>STAGE {stage}</span>
+            <span style={{ fontSize: 15 }}>{mission}</span>
+            {timer(34)}
+            <div style={{ width: Math.min(220, WING_W - 28) }}>{progressBar}</div>
           </div>
 
-          {/* Right wing: resources */}
+          {/* Right wing: hull and the EMP */}
           <div style={{
-            position: 'absolute', top: 14, left: PLAYFIELD_RIGHT, width: WING_W,
-            padding: '0 14px', boxSizing: 'border-box',
-            display: 'flex', flexDirection: 'column', gap: 7,
-            alignItems: 'flex-end', ...mono,
+            position: 'absolute', top: 14, left: PLAYFIELD_RIGHT, width: WING_W, padding: '0 14px', boxSizing: 'border-box',
+            display: 'flex', flexDirection: 'column', gap: 9, alignItems: 'flex-end', ...mono,
           }}>
-            <span>{'♥'.repeat(Math.max(0, lives))}</span>
-            <span style={{ pointerEvents: 'all', marginTop: 4 }}>{soundButton}</span>
-            <div style={{ marginTop: 10, width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
-              <CorePanel width={Math.min(300, WING_W - 28)} />
+            {hullPips}
+            <span style={{ pointerEvents: 'all' }}>{soundButton}</span>
+            <div style={{ marginTop: 6, width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
+              <EmpPanel width={Math.min(300, WING_W - 28)} />
             </div>
           </div>
         </>
       ) : (
-        <>
-          {/* Portrait: single top bar across the full width */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, width: '100%',
-            padding: '5px 10px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            ...mono,
-          }}>
-            <span>SCORE {String(score).padStart(6, '0')}</span>
-            <span>HI {String(hiScore).padStart(6, '0')}</span>
-            <span>{'♥'.repeat(Math.max(0, lives))}</span>
+        // Portrait: everything along the top edge, away from the pursuers
+        // coming in at the bottom.
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: '100%', padding: '6px 10px', boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column', gap: 5, ...mono,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {hullPips}
+            {timer(22)}
             {soundButton}
           </div>
-
-          <div style={{ position: 'absolute', top: 28, left: 10 }}>{grazeLine}</div>
-          <div style={{ position: 'absolute', top: 44, left: 10 }}>{chainLine}</div>
-          <div style={{ position: 'absolute', bottom: 12, left: 10 }}><CorePanel width={170} /></div>
-        </>
-      )}
-
-      {IS_TOUCH && <TouchButtons />}
-      <HintBanner />
-
-      {/* Boss warning banner — centered on the corridor, not the whole stage */}
-      {bossWarning && (
-        <div style={{
-          position: 'absolute', top: '38%',
-          left: PLAYFIELD_LEFT, width: PLAYFIELD_W,
-          textAlign: 'center', pointerEvents: 'none', userSelect: 'none',
-          fontFamily: 'monospace',
-        }}>
-          <style>{`
-            @keyframes warnFlash {
-              0%, 100% { opacity: 1; text-shadow: 0 0 24px #ff2200, 0 0 60px #ff2200; }
-              50%      { opacity: 0.25; text-shadow: 0 0 8px #ff2200; }
-            }
-            @keyframes warnSlide {
-              from { transform: translateX(-18px); }
-              to   { transform: translateX(18px); }
-            }
-          `}</style>
-          <div style={{
-            fontSize: 44, fontWeight: 'bold', letterSpacing: 14,
-            color: '#ff3322',
-            animation: 'warnFlash 0.45s linear infinite',
-          }}>
-            WARNING
-          </div>
-          <div style={{
-            marginTop: 6, fontSize: 12, letterSpacing: 6, color: '#ff8877',
-            animation: 'warnFlash 0.45s linear infinite, warnSlide 0.9s ease-in-out infinite alternate',
-          }}>
-            A HUGE BATTLESHIP IS APPROACHING
+          {progressBar}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontSize: 12, color: '#aabbcc', paddingTop: 2 }}>{mission}</span>
+            <EmpPanel width={170} />
           </div>
         </div>
       )}
 
-      {/* Boss HP bar — centered on the corridor */}
-      {bossActive && (
-        <div style={{
-          position: 'absolute', bottom: 16,
-          left: PLAYFIELD_LEFT + PLAYFIELD_W / 2,
-          transform: 'translateX(-50%)',
-          width: 240,
-          pointerEvents: 'none', userSelect: 'none',
-          fontFamily: 'monospace', color: '#fff', fontSize: 10,
-          textAlign: 'center',
-        }}>
-          <div style={{ marginBottom: 3, letterSpacing: 2, color: '#ff8888' }}>BOSS</div>
-          <div style={{
-            width: '100%', height: 10, background: '#333',
-            borderRadius: 5, overflow: 'hidden',
-            boxShadow: '0 0 6px #ff0000',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${(bossHp / bossMaxHp) * 100}%`,
-              background: bossHp / bossMaxHp > 0.5 ? '#00dd44'
-                        : bossHp / bossMaxHp > 0.25 ? '#ffaa00' : '#ff2222',
-              transition: 'width 0.1s, background 0.3s',
-            }} />
-          </div>
-        </div>
-      )}
+      {IS_TOUCH && <EmpButton />}
+      <RadioLine />
     </>
   )
 }
 
-function TouchButtons() {
-  const coreEnabled = useGameStore((s) => s.coreEnabled)
+/** One big EMP button; lit when the pulse is ready. */
+function EmpButton() {
   const phase = useGameStore((s) => s.phase)
-  const bombs = useGameStore((s) => s.bombs)
-  // Only in play: over the title they sat on top of the menu, and DASH
-  // (which sends Space) would start a run.
+  const ready = useGameStore((s) => s.core.ready)
+  // Only in play: over the title it would sit on the menu.
   if (phase !== 'playing') return null
-  const button = (code: string, text: string, bottom: number, size: number, color: string) => (
+  const color = '#33eeff'
+  return (
     <button
-      onPointerDown={(e) => { e.stopPropagation(); tapKey(code) }}
+      onPointerDown={(e) => { e.stopPropagation(); tapKey('KeyE') }}
       style={{
-        position: 'absolute', bottom, right: 14, width: size, height: size, borderRadius: '50%',
-        background: `${color}33`, border: `2px solid ${color}`, color: '#fff',
-        fontFamily: 'monospace', fontSize: 11, letterSpacing: 1,
+        position: 'absolute', bottom: 22, right: 16, width: 84, height: 84, borderRadius: '50%',
+        background: ready ? `${color}55` : 'rgba(0,0,0,0.3)', border: `2px solid ${ready ? color : '#3a5560'}`,
+        color: ready ? '#fff' : '#6a8a94', boxShadow: ready ? `0 0 18px ${color}` : undefined,
+        fontFamily: 'monospace', fontSize: 15, fontWeight: 'bold', letterSpacing: 2,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         userSelect: 'none', touchAction: 'none', zIndex: 10, pointerEvents: 'auto',
       }}
     >
-      {text}
+      EMP
     </button>
-  )
-  return (
-    <>
-      {coreEnabled && button('ShiftLeft', 'ABSORB', 18, 76, '#33eeff')}
-      {button('Space', 'DASH', coreEnabled ? 104 : 18, 58, '#b9a6ff')}
-      {bombs > 0 && button('KeyE', `BOMB ${bombs}`, coreEnabled ? 172 : 86, 58, '#ffcf5a')}
-    </>
   )
 }
 
-/** First-time teaching prompts: non-blocking, centered on the corridor. */
-function HintBanner() {
+/** Short radio lines and prompts: never block, centered on the corridor
+ *  just under the top HUD. */
+function RadioLine() {
   const hint = useGameStore((s) => s.hint)
   const phase = useGameStore((s) => s.phase)
   if (!hint || phase !== 'playing') return null
   const color = hint.tone === 'warn' ? '#ff8a4d' : '#7ff3ff'
+  const who = hint.who ? SPEAKERS[hint.who] : null
   return (
     <div key={hint.id} style={{
-      position: 'absolute', top: '16%', left: PLAYFIELD_LEFT, width: PLAYFIELD_W,
+      position: 'absolute', top: IS_WIDE ? 18 : 96, left: PLAYFIELD_LEFT, width: PLAYFIELD_W,
       display: 'flex', justifyContent: 'center', pointerEvents: 'none', userSelect: 'none',
     }}>
       <style>{`
-        @keyframes hintIn {
+        @keyframes radioIn {
           from { opacity: 0; transform: translateY(-8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
       <div style={{
-        fontFamily: 'monospace', fontSize: 15, letterSpacing: 2, color,
-        padding: '8px 16px', background: 'rgba(0,8,20,0.72)',
-        border: `1px solid ${color}`, borderRadius: 4,
-        textShadow: `0 0 8px ${color}`, textAlign: 'center',
-        maxWidth: '92%', animation: 'hintIn 0.25s ease-out',
+        display: 'flex', alignItems: 'center', gap: 10, maxWidth: '92%',
+        fontFamily: '"Noto Sans TC", system-ui, sans-serif', fontSize: 15, letterSpacing: 1, color: '#f2ede2',
+        padding: '7px 14px', background: 'rgba(0,8,20,0.78)',
+        border: `1px solid ${who ? who.color : color}`, borderRadius: 4,
+        animation: 'radioIn 0.25s ease-out',
       }}>
-        {hint.text}
+        {who && (
+          <span style={{
+            flex: 'none', fontWeight: 900, fontSize: 13, padding: '1px 8px',
+            background: who.color, color: '#140e08',
+          }}>
+            {who.name}
+          </span>
+        )}
+        <span style={who ? undefined : { fontFamily: 'monospace', color, letterSpacing: 2, textShadow: `0 0 8px ${color}` }}>
+          {hint.text}
+        </span>
       </div>
     </div>
   )

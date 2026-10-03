@@ -43,44 +43,28 @@ class AudioSystem {
 
   /** Settings screen: a short, recognisable cue to judge the SFX level by. */
   playPreview() {
-    this.fire(SFX['level-up'])
-  }
-
-  // ── weapons ─────────────────────────────────────────────────────────────
-  playShoot() {
-    this.fire(SFX.shoot, 1.07)
+    this.fire(SFX['emp-ready'])
   }
 
   // ── core ────────────────────────────────────────────────────────────────
-  playAbsorbOpen() {
-    this.fire(SFX['absorb-open'], 0.8)
-  }
-
-  /** Catches within one window climb a semitone each, so a big haul sings. */
+  /** A quick run of absorbed rounds climbs a semitone each. */
   playAbsorbCatch(nth: number) {
     this.fire(SFX['absorb-catch'], Math.pow(2, Math.min(nth - 1, 12) / 12))
   }
 
-  playLevelUp() {
-    this.fire(SFX['level-up'])
+  playEmpReady() {
+    this.fire(SFX['emp-ready'])
   }
 
-  /** A sharp, high crack: the shield took the hit instead of the ship. */
-  playShieldBreak() {
-    this.fire(SFX['shield-break'], 1.6)
+  playEmp() {
+    this.fire(SFX['emp-fire'], 0.85)
+    this.fire(SFX['emp-blast'], 0.7)
   }
 
-  playBomb() {
-    this.fire(SFX['bomb-fire'])
-    this.fire(SFX['bomb-blast'])
-  }
-
-  playOverheat() {
-    this.fire(SFX.overheat)
-  }
-
-  playDash() {
-    this.fire(SFX.dash, 0.6)
+  // ── pursuers ────────────────────────────────────────────────────────────
+  /** Short, sharp lock tone before a missile launches. */
+  playMissileLock() {
+    this.fire(SFX['missile-lock'], 1.5)
   }
 
   /** Heavier, lower thump than any energy cue: a missile is coming. */
@@ -88,40 +72,13 @@ class AudioSystem {
     this.fire(SFX['missile-launch'], 0.75)
   }
 
-  playBossHurt() {
-    this.fire(SFX['boss-hurt'])
-  }
-
   // ── explosions ──────────────────────────────────────────────────────────
-  playExplosion(size: 'small' | 'large' | 'boss' = 'small') {
-    this.fire(
-      size === 'boss' ? SFX['explosion-boss']
-        : size === 'large' ? SFX['explosion-large']
-          : SFX['explosion-small'],
-    )
+  playExplosion(size: 'small' | 'large' = 'small') {
+    this.fire(size === 'large' ? SFX['explosion-large'] : SFX['explosion-small'])
   }
 
   playPlayerHit() {
     this.fire(SFX['player-hit'], 0.9)
-  }
-
-  // ── pickups & feedback ──────────────────────────────────────────────────
-  playPickup(type: 'life' | 'bomb') {
-    this.fire(type === 'bomb' ? SFX['pickup-bomb'] : SFX['pickup-life'])
-  }
-
-  /** Collect chime climbing one semitone per consecutive gem, as before. */
-  playGem(streak = 1) {
-    const semitones = Math.min(Math.max(streak - 1, 0), 12)
-    this.fire(SFX.gem, Math.pow(2, semitones / 12))
-  }
-
-  playGraze() {
-    this.fire(SFX.graze)
-  }
-
-  playSiren() {
-    this.fire(SFX.siren)
   }
 }
 

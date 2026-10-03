@@ -9,15 +9,7 @@ interface FloatInst {
 const LIFE = 0.75
 const RISE_SPEED = 55
 
-/** Color-codes the chain multiplier tier. */
-export function multColor(mult: number): number {
-  return mult >= 8 ? 0xff44aa
-    :    mult >= 4 ? 0xff9933
-    :    mult >= 2 ? 0xffee44
-    :                0xffffff
-}
-
-/** Pooled `+300`-style score popups that drift up and fade at kill sites. */
+/** Pooled short callouts ("SHAKEN OFF") that drift up and fade. */
 export class FloatingTextPool {
   private pool: FloatInst[] = []
 

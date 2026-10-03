@@ -43,3 +43,13 @@ export const FORMATION_SCALE = Math.min(1.5, PLAYFIELD_W / BASE_W)
 // vertical axis. Everything danmaku-related (hitboxes, bullet size, graze)
 // scales by this same factor, keeping those relationships intact.
 export const SPRITE_SCALE = PLAYFIELD_W / BASE_W
+
+// Development only: `?time=0.25` runs every stage (its length and its wave
+// timeline) at a quarter of the real length, for testing the stage flow.
+// Players never see it; the default is the full length.
+function readTimeScale(): number {
+  if (typeof window === 'undefined') return 1
+  const v = parseFloat(new URLSearchParams(window.location.search).get('time') ?? '')
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 1
+}
+export const TIME_SCALE = readTimeScale()

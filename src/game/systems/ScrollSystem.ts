@@ -1,7 +1,9 @@
 import { Container, Graphics, Texture, TilingSprite } from 'pixi.js'
 import { BgTheme } from '../data/stages'
+import { SCROLL_SPEED } from '../data/chase'
 
-const BG_SPEED = 60
+// The scenery streams down-screen: the ship is flying forward (up).
+const BG_SPEED = SCROLL_SPEED
 const TILE_SPEED_MULT = 0.8   // distant nebula image scrolls slower…
 const STAR_SPEED_MULT = 1.6   // …near star specks scroll faster → parallax
 

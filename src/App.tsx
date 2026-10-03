@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { GameApp } from './game/core/GameApp'
 import { HUD } from './ui/HUD'
 import { TitleScreen } from './ui/TitleScreen'
-import { GameOverScreen } from './ui/GameOverScreen'
-import { StageClearScreen } from './ui/StageClearScreen'
+import { ResultScreen } from './ui/ResultScreen'
 import { StoryDialog } from './ui/StoryDialog'
 import { useGameStore } from './store/gameStore'
 
@@ -94,9 +93,7 @@ export default function App() {
         <HUD />
       </div>
       {phase === 'title'      && <TitleScreen />}
-      {phase === 'gameover'   && <GameOverScreen />}
-      {phase === 'complete'   && <GameOverScreen cleared />}
-      {phase === 'stageclear' && <StageClearScreen />}
+      {(phase === 'gameover' || phase === 'complete' || phase === 'stageclear') && <ResultScreen kind={phase} />}
       {(phase === 'story' || talk) && <StoryDialog />}
       {paused && phase === 'playing' && (
         <div

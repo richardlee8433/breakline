@@ -4,7 +4,7 @@ import type { GameMode } from '../game/data/stages'
 import { SettingsPanel } from './SettingsPanel'
 
 export function TitleScreen() {
-  const { hiScore, startRun } = useGameStore()
+  const startRun = useGameStore((s) => s.startRun)
   const [blink, setBlink] = useState(true)
   const [settings, setSettings] = useState(false)
 
@@ -18,19 +18,17 @@ export function TitleScreen() {
         return
       }
       if (e.code === 'KeyO') { setSettings(true); return }
-      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun('story', true)
-      if (e.code === 'Digit2') startRun('arena', true)
-      // The A/B control build for playtests (game plan §14): same arena,
-      // core switched off.
-      if (e.code === 'Digit3') startRun('arena', false)
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') startRun('story')
+      // Stage 1 straight away, no dialog: quick playtests.
+      if (e.code === 'Digit2') startRun('trial')
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
   }, [startRun, settings])
 
-  const option = (mode: GameMode, core: boolean, text: string, hint: string, primary: boolean) => (
+  const option = (mode: GameMode, text: string, hint: string, primary: boolean) => (
     <button
-      onPointerDown={(e) => { e.stopPropagation(); startRun(mode, core) }}
+      onPointerDown={(e) => { e.stopPropagation(); startRun(mode) }}
       style={{
         display: 'block', width: 360, margin: '0 auto', padding: '12px 0',
         fontFamily: 'monospace', letterSpacing: 3, cursor: 'pointer',
@@ -61,16 +59,15 @@ export function TitleScreen() {
         BREAKLINE
       </div>
       <div style={{ fontSize: 15, color: '#aaaacc', marginTop: 8, letterSpacing: 3 }}>
-        COMBAT PROTOTYPE
+        CHASE PROTOTYPE
       </div>
-      <div style={{ marginTop: 22, fontSize: 13, color: '#888' }}>
-        HI-SCORE  {String(hiScore).padStart(6, '0')}
+      <div style={{ marginTop: 12, fontSize: 14, color: '#8fa4b8', fontFamily: '"Noto Sans TC", system-ui, sans-serif', letterSpacing: 2 }}>
+        不必打贏赫利昂，只要替大家爭取時間。
       </div>
 
       <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {option('story', true, 'STORY', '3 STAGES · TAP · SPACE · 1', true)}
-        {option('arena', true, 'ARENA', 'PHASE 1 COMBAT TEST · PRESS 2', false)}
-        {option('arena', false, 'CONTROL RUN (NO CORE)', 'PLAYTEST A/B · PRESS 3', false)}
+        {option('story', 'STORY', 'WITH BRIEFINGS · TAP · SPACE · 1', true)}
+        {option('trial', 'STAGE 1 TRIAL', 'NO DIALOG · PLAYTEST · PRESS 2', false)}
         <button
           // Open on click (after release), not pointerdown: on touch, the click
           // that follows the tap would otherwise land on the panel's DONE
@@ -88,12 +85,10 @@ export function TitleScreen() {
       </div>
 
       <div style={{ marginTop: 24, fontSize: 13, color: '#778', lineHeight: 1.9, textAlign: 'center' }}>
-        MOVE: ARROW KEYS / WASD &nbsp;·&nbsp; FIRE: AUTO<br />
-        <span style={{ color: '#33eeff' }}>ABSORB: SHIFT</span> &nbsp;·&nbsp;
-        DASH: SPACE &nbsp;·&nbsp; BOMB: E<br />
-        <span style={{ color: '#33eeff' }}>◯ CYAN RINGS: ABSORB → GUN + SHIELD</span> &nbsp;·&nbsp;
-        <span style={{ color: '#ff6a33' }}>▲ ORANGE MISSILES: DODGE</span><br />
-        PAUSE: P / ESC
+        MOVE: ARROW KEYS / WASD / DRAG &nbsp;·&nbsp; <span style={{ color: '#33eeff' }}>EMP: E / SPACE</span><br />
+        <span style={{ color: '#33eeff' }}>◯ CYAN RINGS: AUTO-ABSORBED → EMP</span> &nbsp;·&nbsp;
+        <span style={{ color: '#ff6a33' }}>▲ MISSILES &amp; SHIPS: DODGE</span><br />
+        SURVIVE THE CLOCK &nbsp;·&nbsp; PAUSE: P / ESC
       </div>
 
       {settings && (

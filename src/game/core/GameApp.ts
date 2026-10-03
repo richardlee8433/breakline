@@ -3,101 +3,80 @@ import { AdvancedBloomFilter } from 'pixi-filters'
 import { loadAssets } from '../../assets/AssetLoader'
 import { InputSystem } from '../systems/InputSystem'
 import { ScrollSystem } from '../systems/ScrollSystem'
-import { CollisionSystem, KillFx, damageEnemy, damageBoss, shootDownMissile } from '../systems/CollisionSystem'
+import { CollisionSystem } from '../systems/CollisionSystem'
 import { WaveSystem } from '../systems/WaveSystem'
+import { CoreSystem } from '../systems/CoreSystem'
 import { BulletPool } from '../entities/BulletPool'
 import { Player } from '../entities/Player'
-import { Boss } from '../entities/Boss'
 import { HostilePools } from '../entities/Enemy'
-import { PickupPool } from '../entities/Pickup'
 import { ExplosionPool } from '../fx/Explosion'
-import { BombEffect } from '../fx/BombEffect'
 import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
-import { BulletTrail } from '../fx/BulletTrail'
 import { Shockwave } from '../fx/Shockwave'
 import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture } from '../fx/GlowTexture'
 import { AbsorbField } from '../fx/AbsorbField'
-import { CoreSystem } from '../systems/CoreSystem'
-import { BOMB, SHIELD } from '../data/core'
-import { ShieldBubble } from '../fx/ShieldBubble'
-import { resetDrops } from '../systems/DropSystem'
-import { GemPool } from '../entities/Gem'
-import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
 import { FloatingTextPool } from '../fx/FloatingText'
-import { STORY_STAGES, stageConfig } from '../data/stages'
-import { introFor } from '../data/story'
-import { gameStore, HitCause, Hint } from '../../store/gameStore'
+import { musicSystem } from '../systems/MusicSystem'
 import { audioSystem } from '../systems/AudioSystem'
+import { EMP, FIELD, HULL } from '../data/chase'
+import { stageConfig } from '../data/stages'
+import { gameStore, HitCause, Hint } from '../../store/gameStore'
+import type { Speaker } from '../data/story'
 
 import {
   STAGE_W as W, STAGE_H as H, SPRITE_SCALE,
   PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT,
 } from '../config'
 
+const IS_TOUCH = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+const EMP_RADIUS = EMP.radiusFrac * PLAYFIELD_W
+
+/**
+ * The chase: survive the stage's clock while pursuers close in from behind.
+ * Energy rounds feed the always-on field; the EMP spends a full gauge to
+ * knock nearby pursuers dark; missiles and rams cost hull.
+ */
 export class GameApp {
   private app: Application
   private input: InputSystem
-  private collision: CollisionSystem
+  private collision = new CollisionSystem()
+  private core = new CoreSystem()
 
   private scroll!: ScrollSystem
   private waves!: WaveSystem
-  private playerBullets!: BulletPool
-  private enemyBullets!: BulletPool
-  private bossBullets!: BulletPool
+  private energy!: BulletPool
   private missiles!: BulletPool
-  private hostilePools!: HostilePools
+  private hostile!: HostilePools
   private player!: Player
-  private boss!: Boss
-  private pickups!: PickupPool
-  private gems!: GemPool
   private explosions!: ExplosionPool
-  private bombEffect!: BombEffect
-  private bulletTrail!: BulletTrail
-  private exhaust!: EngineExhaust
   private shockwave!: Shockwave
   private floats!: FloatingTextPool
-  private killFx!: KillFx
-  private core = new CoreSystem()
-  private absorbField!: AbsorbField
-  private energyPools!: BulletPool[]
-  // Held state of the press-to-trigger keys, for edge detection. Starts
-  // "held" each stage so the key that started the run can't fire on frame 1.
-  private held = { absorb: true, dash: true, bomb: true }
-  private bombCd = 0
-  private shieldFx!: ShieldBubble
-  private coreSyncAcc = 0
-  private lastCoreKey = ''
-
-  // Playtest metrics not already tallied by CoreSystem.
-  private run = {
-    seconds: 0, overheatSeconds: 0, dashes: 0, bombsFound: 0, bombsUsed: 0, bombKills: 0,
-    deaths: { energy: 0, missile: 0, hull: 0, beam: 0 } as Record<HitCause, number>,
-    deathsWhileAbsorbing: 0,
-  }
-  // First-time teaching prompts. Non-blocking banners, once per run each.
-  private hintSeen = { level: false, bomb: false, missile: false, overheat: false }
-  // Story-mode tutorials: the engineer explains each mechanic once per run.
-  private talkSeen = { absorb: false, bomb: false }
-  private hintTimer = 0
-  private hintSerial = 0
+  private exhaust!: EngineExhaust
+  private field!: AbsorbField
 
   private bgLayer!: Container
   private gameLayer!: Container
   private bulletLayer!: Container
   private fxLayer!: Container
 
-  private transitioning = false
-  private clearTimer = 0       // stage-clear beat before the next briefing
-  private bossCountdown = -1   // >=0: WARNING banner is up, boss enters at 0
-  private chainTimer = 0       // kill-chain lapse countdown
-  private lastChain = 0
+  // Per-stage state.
+  private elapsed = 0
+  private duration = 1
+  private deathTimer = 0       // > 0: the ship is gone, game over follows
+  private empHeld = true       // edge detection: one press, one pulse
+  private hudAcc = 0
+  private lastCoreKey = ''
+  private stats = { disabled: 0, shaken: 0, still: 0, hits: { missile: 0, ram: 0 } as Record<HitCause, number> }
+  // Radio lines already used this run (each plays once).
+  private said = new Set<string>()
+  private hintTimer = 0
+  private hintSerial = 0
 
   constructor(private canvas: HTMLCanvasElement) {
     this.app = new Application()
     this.input = new InputSystem()
-    this.collision = new CollisionSystem()
   }
 
   async init() {
@@ -121,9 +100,8 @@ export class GameApp {
     this.bulletLayer = new Container()
     this.fxLayer     = new Container()
 
-    // Bullets and fx each get their own bloom pass rather than sharing one:
-    // the bullet pass is clipped to the combat corridor, while the fx pass
-    // must stay full-screen (bomb flash, shockwave sweep across everything).
+    // Bullets and fx each get their own bloom pass: the bullet pass is
+    // clipped to the combat corridor, the fx pass stays full-screen.
     const bloom = () => new AdvancedBloomFilter({
       threshold: 0.25, bloomScale: 1.1, brightness: 1, blur: 5, quality: 4,
     })
@@ -135,18 +113,12 @@ export class GameApp {
     fxWrap.filters = [bloom()]
 
     const edgeLayer = new Container()
-    this.app.stage.addChild(
-      this.bgLayer, edgeLayer, this.gameLayer, bulletWrap, fxWrap,
-    )
+    this.app.stage.addChild(this.bgLayer, edgeLayer, this.gameLayer, bulletWrap, fxWrap)
 
     // Landscape only: gameplay lives in a central corridor, with the nebula
-    // continuing into decorative side wings. Clip gameplay to the corridor so
-    // ships flying in never appear out in the wings, and dim the wings so the
-    // corridor reads as deliberate framing. Portrait needs neither (the
-    // corridor is the whole stage), so it pays no cost at all.
+    // continuing into dimmed side wings. Clip gameplay to the corridor.
     if (PLAYFIELD_W < W) {
-      // One mask instance per container — Pixi tracks a mask's owner, so the
-      // same Graphics cannot clip two containers.
+      // One mask instance per container — Pixi tracks a mask's owner.
       for (const target of [this.gameLayer, bulletWrap]) {
         const m = new Graphics().rect(PLAYFIELD_LEFT, 0, PLAYFIELD_W, H).fill(0xffffff)
         this.app.stage.addChild(m)
@@ -157,84 +129,66 @@ export class GameApp {
 
     this.scroll = new ScrollSystem(this.bgLayer, W, H, 'space')
 
-    // Hostile fire comes in two kinds that must never be confused: cyan
-    // hollow rings (energy, absorbable) and orange arrows (missiles, not).
+    // Two kinds of hostile fire that must never be confused: cyan hollow
+    // rings (energy, harmless, absorbed) and orange arrows (missiles, solid).
     const energyTex = makeEnergyBulletTexture(this.app.renderer, 5 * SPRITE_SCALE)
-    const bossEnergyTex = makeEnergyBulletTexture(this.app.renderer, 6 * SPRITE_SCALE)
     const missileTex = makeMissileTexture(this.app.renderer, SPRITE_SCALE)
+    this.energy   = new BulletPool(this.bulletLayer, energyTex, 500)
+    this.missiles = new BulletPool(this.bulletLayer, missileTex, 120, true)
+    this.hostile  = { energy: this.energy, missile: this.missiles }
 
-    this.bulletTrail   = new BulletTrail(this.bulletLayer)
-    this.playerBullets = new BulletPool(this.bulletLayer, assets.playerBullet, 300)
-    this.enemyBullets  = new BulletPool(this.bulletLayer, energyTex, 1000)
-    this.bossBullets   = new BulletPool(this.bulletLayer, bossEnergyTex, 200)
-    this.missiles      = new BulletPool(this.bulletLayer, missileTex, 120, true)
-
-    this.player    = new Player(this.gameLayer, assets.playerShip, this.playerBullets, H)
-    this.boss      = new Boss(this.gameLayer)
-    this.pickups   = new PickupPool(this.gameLayer, assets.pickupOneUp, assets.pickupBomb)
-    this.pickups.onCollect = (type) => { if (type === 'bomb') this.onBombFound() }
-    this.gems      = new GemPool(this.gameLayer, assets.gem)
-    this.explosions = new ExplosionPool(this.fxLayer, assets.explosionFrames)
-    this.bombEffect = new BombEffect(this.fxLayer, W, H)
-    this.shockwave  = new Shockwave(this.fxLayer)
-    this.floats     = new FloatingTextPool(this.fxLayer)
-    this.killFx     = {
-      explosions: this.explosions, floats: this.floats, pickups: this.pickups, gems: this.gems,
-    }
+    this.field      = new AbsorbField(this.fxLayer, energyTex)
     this.exhaust    = new EngineExhaust(
       this.bulletLayer, makeGlowBulletTexture(this.app.renderer, 0x44aaff, 3.5 * SPRITE_SCALE))
-
-    this.hostilePools = { energy: this.enemyBullets, missile: this.missiles }
-    this.energyPools = [this.enemyBullets, this.bossBullets]
-    this.absorbField = new AbsorbField(this.fxLayer, energyTex)
-    this.shieldFx = new ShieldBubble(this.fxLayer)
-    this.player.shieldHook = () => this.onShieldHit()
-    this.waves = new WaveSystem(this.gameLayer)
+    this.player     = new Player(this.gameLayer, assets.playerShip, H)
+    this.field.radius = this.player.shipWidth * FIELD.radiusFactor
+    this.explosions = new ExplosionPool(this.fxLayer, assets.explosionFrames)
+    this.shockwave  = new Shockwave(this.fxLayer)
+    this.floats     = new FloatingTextPool(this.fxLayer)
+    this.waves      = new WaveSystem(this.gameLayer)
     await this.waves.loadTextures()
 
-    // Phase transitions
     gameStore.subscribe((s, prev) => {
-      // A new run (arena START, or story mode opening on its briefing).
-      if (prev.phase === 'title' && s.phase !== 'title') this.resetRunStats()
-      // Every way into combat — START, a finished briefing, a story retry —
-      // loads the stage. startStage owns the per-stage BGM.
+      if (prev.phase === 'title' && s.phase !== 'title') this.said.clear()
+      // Every way into combat — a trial START, a finished briefing, a retry
+      // — loads the stage from scratch.
       if (s.phase === 'playing' && prev.phase !== 'playing') this.startStage(s.stage)
       if (s.phase === 'story' && prev.phase !== 'story') this.enterStory()
-      if (s.phase === 'stageclear' && prev.phase !== 'stageclear') this.handleStageClear()
-      if (s.phase === 'complete' && prev.phase === 'story') this.finishRun(true)   // story ending
       // A conversation just closed: the key that closed it must not also
-      // dash or bomb on the first resumed frame.
-      if (prev.talk && !s.talk) this.held.absorb = this.held.dash = this.held.bomb = true
-      if (s.phase === 'gameover' && s.phase !== prev.phase) musicSystem.stop()
-      if (s.phase === 'complete' && s.phase !== prev.phase) musicSystem.playJingle('stage-clear')
-      if (s.phase === 'title' && s.phase !== prev.phase) musicSystem.playTitle()
+      // fire the EMP on the first resumed frame.
+      if (prev.talk && !s.talk) this.empHeld = true
+      if (s.phase !== prev.phase) {
+        if (s.phase === 'gameover') musicSystem.stop()
+        if (s.phase === 'stageclear' || s.phase === 'complete') musicSystem.playJingle('stage-clear')
+        if (s.phase === 'title') musicSystem.playTitle()
+      }
     })
 
-    // Catch-up: on slow networks (VIVERSE/Netlify CDN) the player can press
-    // START before init reaches this line — that title→playing transition
-    // happened with no subscriber, so no stage was ever loaded and no enemies
-    // would spawn. If we're already mid-"playing", start the stage now.
-    if (gameStore.getState().phase === 'playing') {
-      this.startStage(gameStore.getState().stage)
-    }
+    // Switching tabs pauses the chase: the clock can't be run down unseen.
+    document.addEventListener('visibilitychange', this.onVisibility)
+
+    // Catch-up: START can be pressed before init gets here, with no
+    // subscriber to see it. Load the stage now if so.
+    if (gameStore.getState().phase === 'playing') this.startStage(gameStore.getState().stage)
 
     this.app.ticker.add(({ deltaMS }) => {
-      const dt = Math.min(deltaMS / 1000, 0.05)
-      this.tick(dt)
+      this.tick(Math.min(deltaMS / 1000, 0.05))
     })
   }
 
-  /**
-   * Side wings: a stepped shade that deepens away from the corridor (a cheap
-   * gradient without a texture) plus a faint rule on each corridor edge.
-   */
+  private onVisibility = () => {
+    if (document.hidden) gameStore.getState().autoPause()
+  }
+
+  /** Side wings: a stepped shade deepening away from the corridor plus a
+   *  faint rule on each corridor edge. */
   private buildCorridorEdges(layer: Container) {
     const g = new Graphics()
     const STEPS = 6
     const wing = PLAYFIELD_LEFT
     for (let i = 0; i < STEPS; i++) {
       const w = wing / STEPS
-      const alpha = 0.10 + 0.32 * ((STEPS - 1 - i) / (STEPS - 1))  // darkest at the outer edge
+      const alpha = 0.10 + 0.32 * ((STEPS - 1 - i) / (STEPS - 1))
       g.rect(i * w, 0, w, H).fill({ color: 0x00030a, alpha })
       g.rect(PLAYFIELD_RIGHT + wing - (i + 1) * w, 0, w, H).fill({ color: 0x00030a, alpha })
     }
@@ -243,63 +197,40 @@ export class GameApp {
     layer.addChild(g)
   }
 
+  /** Fresh stage: full hull, empty gauge, clock at zero, timeline rewound. */
   private startStage(stageNum: number) {
-    const { mode } = gameStore.getState()
-    const cfg = stageConfig(mode, stageNum)
+    const cfg = stageConfig(stageNum)
     musicSystem.playStage(cfg.id)
     this.scroll.setTheme(cfg.bgTheme)
     this.waves.loadStage(cfg)
     this.clearField()
     this.player.reset()
     this.core.reset()
-    this.core.enabled = gameStore.getState().coreEnabled
-    this.absorbField.clear()
-    this.held.absorb = this.held.dash = this.held.bomb = true
-    this.bombCd = 0
-    this.shieldFx.clear()
+    this.elapsed = 0
+    this.duration = cfg.duration
+    this.deathTimer = 0
+    this.empHeld = true
+    this.stats = { disabled: 0, shaken: 0, still: 0, hits: { missile: 0, ram: 0 } }
+    const s = gameStore.getState()
+    s.setReport(null)
+    s.setHull(this.player.hull)
+    s.setClock(Math.ceil(this.duration), this.duration)
     this.syncCore(true)
-    gameStore.getState().setReport(null)
-    // The arena teaches with banners (it is the A/B playtest build); story
-    // mode lets the engineer explain things in conversation instead.
-    if (mode === 'arena') {
-      if (this.core.enabled) this.showHint('CYAN RINGS ARE ENERGY  ·  SHIFT TO ABSORB  ·  IT POWERS YOUR GUN', 'info', 6)
-      else this.showHint('CONTROL RUN  ·  CORE OFFLINE  ·  SHOOT, DODGE, SPACE TO DASH', 'info', 5)
-    } else {
-      gameStore.getState().setHint(null)
+    s.setHint(null)
+    this.hintTimer = 0
+    if (s.mode === 'trial') {
+      this.radio(null, IS_TOUCH
+        ? 'CYAN = ENERGY, AUTO-ABSORBED  ·  ORANGE = DODGE  ·  TAP EMP WHEN FULL'
+        : 'CYAN = ENERGY, AUTO-ABSORBED  ·  ORANGE = DODGE  ·  E / SPACE = EMP', 'info', 6)
     }
-    gameStore.getState().resetChain()
-    this.chainTimer = 0
-    this.lastChain = 0
-    this.transitioning = false
-    this.bossCountdown = -1
-    gameStore.getState().setBossWarning(false)
   }
 
-  /** Per-run playtest metrics; cumulative across a story's three stages. */
-  private resetRunStats() {
-    this.run = {
-      seconds: 0, overheatSeconds: 0, dashes: 0, bombsFound: 0, bombsUsed: 0, bombKills: 0,
-      deaths: { energy: 0, missile: 0, hull: 0, beam: 0 }, deathsWhileAbsorbing: 0,
-    }
-    this.core.resetTally()
-    resetDrops()
-    this.hintSeen = { level: false, bomb: false, missile: false, overheat: false }
-    this.talkSeen = { absorb: false, bomb: false }
-  }
-
-  /** Release everything left on the field (between stages, and before a
-   *  briefing so frozen debris doesn't sit behind the dialog). */
+  /** Release everything left on the field. */
   private clearField() {
-    this.playerBullets.releaseAll()
-    this.enemyBullets.releaseAll()
-    this.bossBullets.releaseAll()
+    this.energy.releaseAll()
     this.missiles.releaseAll()
-    this.pickups.releaseAll()
-    this.gems.releaseAll()
     this.floats.releaseAll()
-    this.absorbField.clear()
-    this.shieldFx.clear()
-    this.bulletTrail.update(this.playerBullets)   // redraw with no shots = clear the trails
+    this.field.clear()
   }
 
   /** A briefing (or the ending) is starting: tidy the field and show the
@@ -309,346 +240,205 @@ export class GameApp {
     this.waves.dismissAll()
     this.clearField()
     this.player.reset()
-    if (s.storyScene !== 'ending') this.scroll.setTheme(stageConfig(s.mode, s.stage).bgTheme)
+    if (s.storyScene !== 'ending') this.scroll.setTheme(stageConfig(s.stage).bgTheme)
     s.setHint(null)
-  }
-
-  private handleStageClear() {
-    if (this.transitioning) return
-    this.transitioning = true
-    this.clearTimer = 2.5
-    musicSystem.playJingle('stage-clear')
-  }
-
-  /** After the STAGE CLEAR beat: next stage's briefing, or the ending. */
-  private afterStageClear() {
-    const s = gameStore.getState()
-    if (s.mode !== 'story') {
-      this.finishRun(true)
-      s.setPhase('complete')
-      return
-    }
-    if (s.stage < STORY_STAGES.length) {
-      gameStore.setState({ stage: s.stage + 1 })
-      s.playScene(introFor(s.stage + 1))
-    } else {
-      s.playScene('ending')
-    }
   }
 
   private tick(dt: number) {
     const state = gameStore.getState()
-    if (state.paused) return   // freeze the whole scene while paused
-    const phase = state.phase
+    if (state.paused) return
     screenShake.update(dt, this.app.stage)
     this.scroll.update(dt)
-    if (phase === 'stageclear' && this.clearTimer > 0) {
-      this.clearTimer -= dt
-      if (this.clearTimer <= 0) this.afterStageClear()
+    this.shockwave.update(dt)
+    this.explosions.update(dt)
+    this.floats.update(dt)
+    // A conversation pauses the chase (the backdrop keeps drifting).
+    if (state.phase !== 'playing' || state.talk) return
+    if (hitstop.update(dt)) return
+
+    // The ship is gone: let the wreck burn for a beat, then game over.
+    if (this.deathTimer > 0) {
+      this.deathTimer -= dt
+      this.energy.update(dt, W, H)
+      this.missiles.update(dt, W, H)
+      this.waves.update(dt, this.hostile, this.player.x, this.player.y)
+      if (this.deathTimer <= 0) {
+        this.finishStage(false)
+        gameStore.getState().setPhase('gameover')
+      }
+      return
     }
-    // A conversation pauses combat (the backdrop keeps drifting).
-    if (phase !== 'playing' || state.talk) return
-    if (hitstop.update(dt)) return   // impact freeze-frame
+
+    // The clock runs only while the chase does (never under dialog, pause,
+    // or a hidden tab). Reaching the end beats a hit on the same frame.
+    this.elapsed += dt
+    if (this.elapsed >= this.duration) { this.winStage(); return }
 
     this.input.update()
     const a = this.input.actions
-    const absorbPressed = a.absorb && !this.held.absorb
-    const dashPressed = a.dash && !this.held.dash
-    const bombPressed = a.bomb && !this.held.bomb
-    this.held.absorb = a.absorb; this.held.dash = a.dash; this.held.bomb = a.bomb
+    const empPressed = a.emp && !this.empHeld
+    this.empHeld = a.emp
 
-    // A dash cancels an open absorb window; absorb can't open mid-dash.
-    if (dashPressed && this.player.tryDash(a)) { this.core.cancelAbsorb(); this.run.dashes++ }
-    if (absorbPressed && !this.player.isDead && !this.player.isDashing) this.core.startAbsorb()
-
-    this.player.update(dt, a, this.core.absorbing, this.core.level)
-    if (this.player.consumeJustDied()) this.onPlayerDeath()
+    this.player.update(dt, a)
+    if (this.player.moved < 0.5) this.stats.still += dt
     this.core.update(dt)
-    if (this.bombCd > 0) this.bombCd -= dt
-    if (bombPressed && !this.player.isDead && this.bombCd <= 0 && gameStore.getState().useBomb()) {
-      this.bombCd = BOMB.cooldown
-      this.run.bombsUsed++
-      this.fireBomb()
-    }
-    this.trackRun(dt)
+    if (empPressed && this.core.fireEmp()) this.fireEmp()
 
-    // Kill-chain lapse: each kill rearms the window; silence breaks the chain
-    const chain = gameStore.getState().chain
-    if (chain > this.lastChain) this.chainTimer = 2.0
-    else if (chain > 0) {
-      this.chainTimer -= dt
-      if (this.chainTimer <= 0) gameStore.getState().resetChain()
-    }
-    this.lastChain = gameStore.getState().chain
-
-    this.exhaust.update(dt, this.player.x, this.player.y, !this.player.isDead)
-    this.bulletTrail.update(this.playerBullets)
-    this.playerBullets.update(dt, W, H)
-    this.enemyBullets.update(dt, W, H)
-    this.bossBullets.update(dt, W, H)
+    this.exhaust.update(dt, this.player.x, this.player.y, true)
+    this.energy.update(dt, W, H)
     this.missiles.update(dt, W, H)
-
-    const { spawnBoss, activeLasers } = this.waves.update(
-      dt, this.hostilePools, this.player.x, this.player.y, H)
-    if (spawnBoss && !this.boss.active && this.bossCountdown < 0) {
-      // WARNING phase: clear the field, blare the siren, boss enters after it
-      this.bossCountdown = 2.4
-      gameStore.getState().setBossWarning(true)
-      audioSystem.playSiren()
-      // The boss theme's 2.1s intro runs under the 2.4s WARNING banner, so
-      // its main loop drops exactly as the boss finishes entering.
-      musicSystem.playBoss()
-      this.waves.dismissAll()
-      this.enemyBullets.releaseAll()
-      this.missiles.releaseAll()
-      // Warm the browser cache during the siren — boss art runs to a few
-      // hundred KB, and spawn() fetches it at the instant it must appear.
-      const { mode, stage } = gameStore.getState()
-      const sprite = stageConfig(mode, stage).boss?.shipSprite
-      if (sprite) new Image().src = sprite
-    }
-    if (this.bossCountdown >= 0) {
-      this.bossCountdown -= dt
-      if (this.bossCountdown < 0 && !this.boss.active) {
-        gameStore.getState().setBossWarning(false)
-        const { stage, loop, mode } = gameStore.getState()
-        const base = stageConfig(mode, stage).boss
-        // Loop rank: later playthroughs field tougher, faster bosses
-        const rank = Math.min(loop - 1, 4)
-        if (base) {
-          const boss = rank === 0 ? base : {
-            ...base,
-            maxHp: Math.round(base.maxHp * (1 + 0.25 * rank)),
-            bulletSpeedMult: base.bulletSpeedMult * (1 + 0.12 * rank),
-            fireRateMult: base.fireRateMult / (1 + 0.08 * rank),
-          }
-          this.boss.spawn(boss, stage)
-        }
-      }
+    const shaken = this.waves.update(dt, this.hostile, this.player.x, this.player.y)
+    if (shaken) {
+      this.stats.shaken += shaken
+      this.floats.spawn(this.player.x, H - 40 * SPRITE_SCALE, 'SHAKEN OFF', 0x9fdcff)
     }
 
-    // Enemy laser hits on player (registers a hit; death resolves below)
-    for (const beam of activeLasers) {
-      if (this.player.y > beam.fromY && Math.abs(this.player.x - beam.x) < 10) {
-        this.player.hit('beam')
-        break
-      }
-    }
-
-    if (this.boss.active) {
-      this.boss.update(
-        dt, this.player.x, this.player.y,
-        this.bossBullets, this.explosions, this.bombEffect,
-      )
-    }
-
-    this.pickups.update(dt, this.player.x, this.player.y, H)
-    this.gems.update(dt, this.player.x, this.player.y, H)
-
-    this.absorbField.update(dt, this.player.x, this.player.y, this.core.absorbing && !this.player.isDead)
-    this.shieldFx.update(dt, this.player.x, this.player.y, this.core.shieldLayers, !this.player.isDead)
-    if (this.core.absorbing) {
-      this.collision.absorb(this.energyPools, this.player, (x, y) => {
-        this.core.catchRound()
-        this.absorbField.spawnCatch(x, y)
-      })
-    }
-    this.collision.check(
-      this.playerBullets, this.enemyBullets, this.bossBullets, this.missiles,
-      this.waves.enemies,
-      this.boss.active ? this.boss : null,
-      this.player, this.killFx,
-    )
-
-    this.explosions.update(dt)
-    this.bombEffect.update(dt)
-    this.shockwave.update(dt)
-    this.floats.update(dt)
-
-    // Hull state at a glance: cyan while catching, a hot flicker when overheated.
-    if (!this.player.isDead) {
-      this.player.sprite.tint = this.core.overheated
-        ? (Math.sin(performance.now() * 0.03) > 0 ? 0xff7a50 : 0xffc0a0)
-        : this.core.absorbing ? 0xb8fbff : 0xffffff
-    }
-    this.syncCore(false, dt)
-
-    // Boss-less stages (the Phase 1 arena) end once the field is clear.
-    if (this.waves.finished && !this.player.isDead) {
-      this.finishRun(true)
-      gameStore.getState().setPhase('complete')
-    }
-  }
-
-  /**
-   * The bomb is a screen-wide blast, the way neon-raiden's was: a shockwave
-   * from the ship, every hostile round erased (missiles knocked down), every
-   * enemy on screen hit once, and a share of a boss's hull.
-   */
-  private fireBomb() {
-    const x = this.player.x, y = this.player.y
-    this.shockwave.trigger(x, y)
-    screenShake.trigger(8)
-    hitstop.trigger(0.08)
-    audioSystem.playBomb()
-
-    this.enemyBullets.releaseAll()
-    this.bossBullets.releaseAll()
-    for (const m of this.missiles.all) {
-      if (m.active) shootDownMissile(this.missiles, m, this.killFx)
-    }
-
-    for (const e of this.waves.enemies) {
-      // Only what the player can see: ships still queued above the screen
-      // or outside the corridor are not caught by the blast.
-      if (!e.active || e.sprite.y < 0 || e.sprite.y > H ||
-          e.sprite.x < PLAYFIELD_LEFT || e.sprite.x > PLAYFIELD_RIGHT) continue
-      if (damageEnemy(e, BOMB.damage, this.killFx)) this.run.bombKills++
-    }
-
-    if (this.boss.active) {
-      const dmg = Math.max(BOMB.bossMinDamage, this.boss.maxHp * BOMB.bossDamageFrac)
-      damageBoss(this.boss, dmg, this.boss.sprite.x, this.boss.sprite.y, this.killFx, this.bossBullets)
-      this.explosions.spawn(this.boss.sprite.x, this.boss.sprite.y, 3)
-      audioSystem.playExplosion('large')
-    }
-  }
-
-  /** Mirror the core into the store for the HUD: at most 20 Hz, and only
-   *  when something visible changed — except catches and state flips, which
-   *  push at once so the energy bar jumps on the frame it should. */
-  private syncCore(force: boolean, dt = 0) {
-    const c = this.core
-    const view = {
-      energy: Math.round(c.energy),
-      heat: Math.round(c.heat),
-      overheated: c.overheated,
-      absorbing: c.absorbing,
-      absorbCharge: Math.round(c.absorbCharge * 20) / 20,
-      dashCharge: Math.round(this.player.dashCharge * 20) / 20,
-      catchSerial: c.catchSerial,
-      level: c.level,
-      shield: c.shieldLayers,
-    }
-    const key = `${view.energy}|${view.heat}|${view.overheated}|${view.absorbing}|${view.absorbCharge}|${view.dashCharge}|${view.catchSerial}|${view.level}|${view.shield}`
-    if (key === this.lastCoreKey) return
-    const prev = gameStore.getState().core
-    const urgent = view.catchSerial !== prev.catchSerial || view.overheated !== prev.overheated ||
-      view.absorbing !== prev.absorbing || view.shield !== prev.shield
-    this.coreSyncAcc += dt
-    if (!force && !urgent && this.coreSyncAcc < 0.05) return
-    this.coreSyncAcc = 0
-    this.lastCoreKey = key
-    gameStore.getState().setCore(view)
-  }
-
-  private trackRun(dt: number) {
-    const r = this.run, c = this.core
-    r.seconds += dt
-    if (c.overheated) r.overheatSeconds += dt
-    const s = gameStore.getState()
-
-    // Story: the engineer stops the fight the first time energy rounds are
-    // in the air, and explains absorbing while they hang there.
-    if (s.mode === 'story' && c.enabled && !this.talkSeen.absorb &&
-        this.enemyBullets.all.some((b) => b.active && b.sprite.y > 0)) {
-      this.talkSeen.absorb = true
-      s.playTalk('tut-absorb')
-    }
-
-    if (this.hintTimer > 0) {
-      this.hintTimer -= dt
-      if (this.hintTimer <= 0) gameStore.getState().setHint(null)
-    }
-    if (s.mode === 'arena' && c.enabled && !this.hintSeen.level && c.level >= 1) {
-      this.hintSeen.level = true
-      this.showHint('GUN LEVEL UP  ·  SHIELD ONLINE  ·  A HIT COSTS ONE LEVEL', 'info', 4)
-    }
-    if (!this.hintSeen.missile && this.missiles.all.some((m) => m.active)) {
-      this.hintSeen.missile = true
-      this.showHint(c.enabled
-        ? 'MISSILES CAN\'T BE ABSORBED  ·  SHOOT OR DODGE'
-        : 'MISSILES  ·  SHOOT, DODGE OR DASH', 'warn', 5)
-    }
-    if (!this.hintSeen.overheat && c.overheated) {
-      this.hintSeen.overheat = true
-      this.showHint('OVERHEAT  ·  ABSORB LOCKED  ·  GUN AND DASH STILL WORK', 'warn', 4)
-    }
-  }
-
-  private showHint(text: string, tone: Hint['tone'], seconds: number) {
-    this.hintTimer = seconds
-    gameStore.getState().setHint({ id: ++this.hintSerial, text, tone })
-  }
-
-  private finishRun(cleared: boolean) {
-    const s = gameStore.getState()
-    const r = this.run
-    const round1 = (n: number) => Math.round(n * 10) / 10
-    s.setHint(null)
-    s.setReport({
-      mode: this.core.enabled ? 'core' : 'control',
-      cleared,
-      seconds: round1(r.seconds),
-      score: s.score,
-      ...this.core.tally,
-      bombsFound: r.bombsFound,
-      bombsUsed: r.bombsUsed,
-      bombKills: r.bombKills,
-      overheatSeconds: round1(r.overheatSeconds),
-      dashes: r.dashes,
-      deaths: { ...r.deaths },
-      deathsWhileAbsorbing: r.deathsWhileAbsorbing,
+    this.collision.absorb(this.energy, this.player, this.field, (x, y) => {
+      this.core.absorb()
+      this.field.spawnCatch(x, y)
     })
+    this.collision.check(this.missiles, this.waves.enemies, this.player)
+    if (this.player.lastHit) this.onHit(this.player.lastHit)
+
+    this.field.update(dt, this.player.x, this.player.y, !this.player.isDead)
+    this.radioCues()
+    this.syncHud(dt)
   }
 
-  /** First bomb of the run: the engineer explains it (story) or a banner
-   *  does (arena). */
-  private onBombFound() {
-    this.run.bombsFound++
-    const s = gameStore.getState()
-    if (s.mode === 'story' && !this.talkSeen.bomb) {
-      this.talkSeen.bomb = true
-      s.playTalk('tut-bomb')
-    } else if (s.mode === 'arena' && !this.hintSeen.bomb) {
-      this.hintSeen.bomb = true
-      this.showHint('BOMB PICKED UP  ·  PRESS E TO CLEAR THE SCREEN', 'info', 4)
+  /** The EMP: everything running inside its reach goes dark, and the
+   *  missiles and rounds inside it are wiped. Nothing beyond it changes. */
+  private fireEmp() {
+    const x = this.player.x, y = this.player.y, r2 = EMP_RADIUS * EMP_RADIUS
+    this.shockwave.trigger(x, y, EMP_RADIUS)
+    screenShake.trigger(5)
+    audioSystem.playEmp()
+    for (const e of this.waves.enemies) {
+      if (!e.empable) continue
+      const dx = e.sprite.x - x, dy = e.sprite.y - y
+      if (dx * dx + dy * dy > r2) continue
+      e.disable(e.def.hardened ? EMP.disableHardened : EMP.disable)
+      this.stats.disabled++
     }
-  }
-
-  /** The shield took a hit: spend a layer, wipe nearby fire, small jolt. */
-  private onShieldHit(): boolean {
-    if (!this.core.breakShield()) return false
-    const x = this.player.x, y = this.player.y, r2 = (SHIELD.clearRadius * SPRITE_SCALE) ** 2
-    for (const pool of [this.enemyBullets, this.bossBullets, this.missiles]) {
+    for (const pool of [this.energy, this.missiles]) {
       for (const b of pool.all) {
         if (!b.active) continue
         const dx = b.sprite.x - x, dy = b.sprite.y - y
-        if (dx * dx + dy * dy < r2) pool.release(b)
+        if (dx * dx + dy * dy > r2) continue
+        if (pool === this.missiles) this.explosions.spawn(b.sprite.x, b.sprite.y, 0.7)
+        pool.release(b)
       }
     }
-    this.shieldFx.burst(x, y)
-    screenShake.trigger(4)
-    hitstop.trigger(0.05)
     this.syncCore(true)
-    return true
   }
 
-  private onPlayerDeath() {
-    this.run.deaths[this.player.lastHitCause]++
-    if (this.core.absorbing) this.run.deathsWhileAbsorbing++
-    this.core.onDeath()
-    this.explosions.spawn(this.player.x, this.player.y, 2.5)
-    screenShake.trigger(8)
-    hitstop.trigger(0.15)
+  private onHit(cause: HitCause) {
+    this.player.lastHit = null
+    this.stats.hits[cause]++
+    gameStore.getState().setHull(this.player.hull)
     audioSystem.playPlayerHit()
-    const s = gameStore.getState()
-    s.resetChain()   // death breaks the kill chain
-    s.loseLife()
-    if (s.lives <= 1) {
-      this.finishRun(false)
-      s.setPhase('gameover')
+    if (this.player.isDead) {
+      this.explosions.spawn(this.player.x, this.player.y, 2.5)
+      screenShake.trigger(9)
+      hitstop.trigger(0.15)
+      this.deathTimer = HULL.deathBeat
+      this.field.clear()
+      gameStore.getState().setHint(null)
+      return
     }
+    this.explosions.spawn(this.player.x, this.player.y, 1.1)
+    screenShake.trigger(5)
+    hitstop.trigger(0.06)
+  }
+
+  /** Time's up with the ship in one piece: the stage is cleared. */
+  private winStage() {
+    this.elapsed = this.duration
+    // Clear the pursuit: nothing can hurt the ship from here on.
+    for (const m of this.missiles.all) if (m.active) this.explosions.spawn(m.sprite.x, m.sprite.y, 0.7)
+    this.waves.dismissAll()
+    this.clearField()
+    this.syncHud(0, true)
+    this.finishStage(true)
+    gameStore.getState().setPhase('stageclear')
+  }
+
+  private finishStage(cleared: boolean) {
+    const s = gameStore.getState()
+    const t = this.core.tally
+    const round1 = (n: number) => Math.round(n * 10) / 10
+    s.setHint(null)
+    s.setReport({
+      stage: s.stage,
+      mode: s.mode,
+      cleared,
+      seconds: round1(this.elapsed),
+      duration: round1(this.duration),
+      hullLeft: this.player.hull,
+      hits: { ...this.stats.hits },
+      rounds: t.rounds,
+      banked: Math.round(t.banked),
+      wasted: Math.round(t.wasted),
+      emps: t.emps,
+      disabled: this.stats.disabled,
+      shaken: this.stats.shaken,
+      stillPct: this.elapsed > 0 ? Math.round((this.stats.still / this.elapsed) * 100) : 0,
+    })
+  }
+
+  /** Short radio lines, each once per run. They never stop the chase. */
+  private radioCues() {
+    const left = this.duration - this.elapsed
+    if (!this.said.has('lock') && this.waves.enemies.some((e) => e.active && e.locking)) {
+      this.say('lock', 'rosa', '飛彈鎖定！橘色的吸不掉，看到就閃。', 'warn', 4)
+    } else if (!this.said.has('ready') && this.core.empReady) {
+      this.say('ready', 'rosa', IS_TOUCH ? 'EMP 充滿了。追兵靠近時按 EMP。' : 'EMP 充滿了。追兵靠近時按 E 或 Space。', 'info', 4)
+    } else if (!this.said.has('shaken') && this.stats.shaken > 0) {
+      this.say('shaken', 'kai', '甩掉一架。', 'info', 2.5)
+    } else if (!this.said.has(`last30-${gameStore.getState().stage}`) && left <= 30 && this.duration > 45) {
+      this.say(`last30-${gameStore.getState().stage}`, 'mira', '還有三十秒，撐住！', 'info', 3)
+    }
+  }
+
+  private say(key: string, who: Speaker, text: string, tone: Hint['tone'], seconds: number) {
+    this.said.add(key)
+    this.radio(who, text, tone, seconds)
+  }
+
+  private radio(who: Speaker | null, text: string, tone: Hint['tone'], seconds: number) {
+    this.hintTimer = seconds
+    gameStore.getState().setHint({ id: ++this.hintSerial, text, tone, ...(who ? { who } : {}) })
+  }
+
+  /** Mirror the clock, hull and core into the store for the HUD: at most
+   *  20 Hz, and only when something visible changed (absorbs and the ready
+   *  flip push at once, so the gauge moves on the frame it should). */
+  private syncHud(dt: number, force = false) {
+    const s = gameStore.getState()
+    s.setClock(Math.max(0, Math.ceil(this.duration - this.elapsed)), this.duration)
+    if (this.hintTimer > 0) {
+      this.hintTimer -= dt
+      if (this.hintTimer <= 0 && s.hint) s.setHint(null)
+    }
+    this.hudAcc += dt
+    this.syncCore(force)
+  }
+
+  private syncCore(force: boolean) {
+    const c = this.core
+    const view = {
+      energy: Math.round(c.energy),
+      ready: c.empReady,
+      empCharge: Math.round(c.empCharge * 20) / 20,
+      catchSerial: c.catchSerial,
+    }
+    const key = `${view.energy}|${view.ready}|${view.empCharge}|${view.catchSerial}`
+    if (key === this.lastCoreKey) return
+    const prev = gameStore.getState().core
+    const urgent = view.catchSerial !== prev.catchSerial || view.ready !== prev.ready
+    if (!force && !urgent && this.hudAcc < 0.05) return
+    this.hudAcc = 0
+    this.lastCoreKey = key
+    gameStore.getState().setCore(view)
   }
 
   /** CSS scale of the canvas so touch deltas map to game pixels */
@@ -657,6 +447,7 @@ export class GameApp {
   }
 
   destroy() {
+    document.removeEventListener('visibilitychange', this.onVisibility)
     this.app.destroy()
     this.input.destroy()
   }

@@ -1,33 +1,10 @@
-import { Bullet, BulletPool } from '../entities/BulletPool'
+import { BulletPool } from '../entities/BulletPool'
 import { Enemy } from '../entities/Enemy'
 import { Player } from '../entities/Player'
-import { Boss } from '../entities/Boss'
-import { PickupPool } from '../entities/Pickup'
-import { GemPool } from '../entities/Gem'
-import { ExplosionPool } from '../fx/Explosion'
-import { FloatingTextPool, multColor } from '../fx/FloatingText'
-import { gameStore } from '../../store/gameStore'
-import { audioSystem } from './AudioSystem'
-import { screenShake } from '../fx/ScreenShake'
-import { hitstop } from '../fx/Hitstop'
-import { SPRITE_SCALE } from '../config'
-import { spawnEnemyDrop } from './DropSystem'
 import { AbsorbField } from '../fx/AbsorbField'
+import { SPRITE_SCALE } from '../config'
 
-const GRAZE_RADIUS = 22 * SPRITE_SCALE
 const BULLET_R = 3 * SPRITE_SCALE
-/** Missile hit radius for player shots. Generous: shooting one down should
- *  feel reliable. Against the player it uses BULLET_R like any round. */
-const MISSILE_R = 8 * SPRITE_SCALE
-const MISSILE_SCORE = 20
-
-/** Everything a kill needs to pay out, shared by every damage source. */
-export interface KillFx {
-  explosions: ExplosionPool
-  floats: FloatingTextPool
-  pickups: PickupPool
-  gems: GemPool
-}
 
 function overlaps(
   ax: number, ay: number, aw: number, ah: number,
@@ -36,127 +13,44 @@ function overlaps(
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
 }
 
-/** Apply damage to an enemy; on a kill, run the full payout and deactivate it.
- *  Returns true if the enemy died. */
-export function damageEnemy(enemy: Enemy, damage: number, fx: KillFx): boolean {
-  enemy.hp -= damage
-  if (enemy.hp > 0) { enemy.flash(); return false }
-  const x = enemy.sprite.x, y = enemy.sprite.y
-  fx.explosions.spawn(x, y, 2); screenShake.trigger(1.5); hitstop.trigger(0.025); audioSystem.playExplosion('small')
-  const { awarded, mult } = gameStore.getState().addKillScore(enemy.scoreValue)
-  fx.floats.spawn(x, y - 10, `+${awarded}`, multColor(mult))
-  spawnEnemyDrop(fx.pickups, x, y)
-  fx.gems.spawn(x, y, Math.random() < 0.35 ? 2 : 1)
-  enemy.deactivate()
-  return true
-}
-
-export function shootDownMissile(pool: BulletPool, missile: Bullet, fx: KillFx) {
-  fx.explosions.spawn(missile.sprite.x, missile.sprite.y, 0.7)
-  gameStore.getState().addScore(MISSILE_SCORE)
-  pool.release(missile)
-}
-
-/** Damage the boss at an impact point, handling its death payout. */
-export function damageBoss(boss: Boss, damage: number, impactX: number, impactY: number, fx: KillFx, bossBullets: BulletPool): boolean {
-  const died = boss.hit(damage, impactX, impactY)
-  screenShake.trigger(died ? 5 : 3); audioSystem.playBossHurt()
-  if (died) {
-    fx.explosions.spawn(boss.sprite.x, boss.sprite.y, 2.5); hitstop.trigger(0.12)
-    bossBullets.releaseAll(); fx.gems.spawn(boss.sprite.x, boss.sprite.y, 16); fx.gems.magnetizeAll()
-  }
-  return died
-}
-
+/**
+ * Only the ship can be hurt, so each check is the ship against one list:
+ * linear in the number of hostiles, no pairwise pass.
+ */
 export class CollisionSystem {
   /**
-   * Catch absorbable rounds inside the open window's wedge. Runs BEFORE
-   * check() each frame, so a caught round is released before it could also
-   * register as a hit: one bullet, one outcome. Missiles never come here.
+   * Absorb every energy round inside the field. The field is wider than the
+   * ship's hit core, so an energy round always meets the field first:
+   * energy rounds never do damage. Runs before check(): one round, one
+   * outcome.
    */
-  absorb(energyPools: BulletPool[], player: Player, onCatch: (x: number, y: number) => void) {
+  absorb(energy: BulletPool, player: Player, field: AbsorbField, onCatch: (x: number, y: number) => void) {
     if (player.isDead) return
-    for (const pool of energyPools) {
-      for (const b of pool.all) {
-        if (!b.active || !AbsorbField.contains(player.x, player.y, b.sprite.x, b.sprite.y)) continue
-        const x = b.sprite.x, y = b.sprite.y
-        pool.release(b)
-        onCatch(x, y)
-      }
+    for (const b of energy.all) {
+      if (!b.active || !field.contains(player.x, player.y, b.sprite.x, b.sprite.y)) continue
+      const x = b.sprite.x, y = b.sprite.y
+      energy.release(b)
+      onCatch(x, y)
     }
   }
 
-  check(
-    playerBullets: BulletPool, enemyBullets: BulletPool, bossBullets: BulletPool, missiles: BulletPool,
-    enemies: Enemy[], boss: Boss | null, player: Player, fx: KillFx,
-  ) {
-    const bossBox = boss?.active ? boss.hitboxWorld : null
-
-    // ── player shots → enemies / boss ───────────────────────────────────
-    for (const bullet of playerBullets.all) {
-      if (!bullet.active) continue
-      const bx = bullet.sprite.x - BULLET_R, by = bullet.sprite.y - BULLET_R * 2
-      const bw = BULLET_R * 2, bh = BULLET_R * 4
-
-      for (const enemy of enemies) {
-        if (!enemy.active) continue
-        const h = enemy.hitbox
-        if (!overlaps(bx, by, bw, bh, enemy.sprite.x + h.x, enemy.sprite.y + h.y, h.width, h.height)) continue
-        playerBullets.release(bullet)
-        damageEnemy(enemy, bullet.damage, fx)
-        break
-      }
-
-      // Missiles are solid: a normal shot knocks one down.
-      if (bullet.active) {
-        for (const m of missiles.all) {
-          if (!m.active) continue
-          if (!overlaps(bx, by, bw, bh, m.sprite.x - MISSILE_R, m.sprite.y - MISSILE_R, MISSILE_R * 2, MISSILE_R * 2)) continue
-          playerBullets.release(bullet)
-          shootDownMissile(missiles, m, fx)
-          break
-        }
-      }
-
-      if (bullet.active && bossBox && boss &&
-          overlaps(bx, by, bw, bh, bossBox.x, bossBox.y, bossBox.width, bossBox.height)) {
-        playerBullets.release(bullet)
-        damageBoss(boss, bullet.damage, bullet.sprite.x, bullet.sprite.y, fx, bossBullets)
-      }
-    }
-
+  /** Solid hazards against the ship's hit core: missiles, then rams.
+   *  Player.hit() decides whether a contact costs hull. */
+  check(missiles: BulletPool, enemies: Enemy[], player: Player): void {
     if (player.isDead) return
-    const ph = player.hitbox
-    const px = player.x + ph.x, py = player.y + ph.y
+    const h = player.hitHalf
+    const px = player.x - h, py = player.y - h, ps = h * 2
 
-    // ── enemy hulls → player ───────────────────────────────────────────
-    for (const enemy of enemies) {
-      if (!enemy.active) continue
-      const h = enemy.hitbox
-      if (overlaps(px, py, ph.width, ph.height, enemy.sprite.x + h.x, enemy.sprite.y + h.y, h.width, h.height)) {
-        player.hit('hull')
-        return
-      }
+    for (const m of missiles.all) {
+      if (!m.active) continue
+      if (!overlaps(m.sprite.x - BULLET_R, m.sprite.y - BULLET_R, BULLET_R * 2, BULLET_R * 2, px, py, ps, ps)) continue
+      if (player.hit('missile')) { missiles.release(m); return }
     }
 
-    // ── hostile bullets → player (hit, else graze) ──────────────────────
-    // A dash passes through every round, energy and missile alike. Hulls
-    // (above) and enemy beams (GameApp) still connect.
-    if (player.isDashing) return
-    const g = GRAZE_RADIUS
-    for (const pool of [enemyBullets, bossBullets, missiles]) {
-      for (const bullet of pool.all) {
-        if (!bullet.active) continue
-        const bx = bullet.sprite.x - BULLET_R, by = bullet.sprite.y - BULLET_R
-        if (overlaps(bx, by, BULLET_R * 2, BULLET_R * 2, px, py, ph.width, ph.height)) {
-          if (!player.hit(pool === missiles ? 'missile' : 'energy')) continue
-          pool.release(bullet)
-          return
-        }
-        if (!bullet.grazed && overlaps(bx, by, BULLET_R * 2, BULLET_R * 2, player.x - g, player.y - g, g * 2, g * 2)) {
-          bullet.grazed = true; gameStore.getState().addGraze(); audioSystem.playGraze()
-        }
-      }
+    for (const e of enemies) {
+      if (!e.harmful) continue
+      if (!overlaps(px, py, ps, ps, e.sprite.x - e.halfW, e.sprite.y - e.halfH, e.halfW * 2, e.halfH * 2)) continue
+      if (player.hit('ram')) return
     }
   }
 }

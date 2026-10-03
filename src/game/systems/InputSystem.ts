@@ -1,10 +1,9 @@
 export interface Actions {
   moveX: number  // -1 | 0 | 1 (keyboard)
   moveY: number  // -1 | 0 | 1 (keyboard)
-  // Held state; GameApp edge-detects these — each is press-to-trigger.
-  absorb: boolean
-  dash: boolean
-  bomb: boolean
+  // Held state; GameApp edge-detects it, so holding the key never fires
+  // a second EMP on its own.
+  emp: boolean
   // Touch drag deltas in canvas pixels, consumed each frame
   touchDX: number
   touchDY: number
@@ -16,7 +15,7 @@ const TOUCH_SENSITIVITY = 1.6
 export class InputSystem {
   private keys = new Set<string>()
   readonly actions: Actions = {
-    moveX: 0, moveY: 0, absorb: false, dash: false, bomb: false,
+    moveX: 0, moveY: 0, emp: false,
     touchDX: 0, touchDY: 0, touchActive: false,
   }
 
@@ -77,9 +76,7 @@ export class InputSystem {
       (k.has('ArrowDown')  || k.has('KeyS') ? 1 : 0) -
       (k.has('ArrowUp')    || k.has('KeyW') ? 1 : 0)
 
-    this.actions.absorb = k.has('ShiftLeft') || k.has('ShiftRight')
-    this.actions.dash = k.has('Space')
-    this.actions.bomb = k.has('KeyE') || k.has('KeyC')
+    this.actions.emp = k.has('KeyE') || k.has('Space')
 
     this.actions.touchActive = this.touching
     this.actions.touchDX = this.accDX * TOUCH_SENSITIVITY

@@ -1,143 +1,80 @@
-import { ABSORB, ENERGY, HEAT, SHIELD } from '../data/core'
+import { ENERGY, EMP } from '../data/chase'
 import { audioSystem } from './AudioSystem'
 
-export const MAX_LEVEL = 4
-
 /**
- * The alien core's resources and its absorb window. Pure game-side state:
- * GameApp mirrors it into the store at a throttled rate for the HUD.
+ * The alien core in the chase prototype: an always-on recovery field that
+ * banks energy from absorbed rounds, and the EMP that spends it.
  *
- * Rules:
- * - absorb is press-to-trigger, with a fixed window and a cooldown after it
- * - each catch adds energy AND heat; heat cools after a short delay
- * - overheating locks absorb only — the gun and the dash keep working
- * - every ENERGY.perLevel of energy is one gun level and one shield layer;
- *   a hit the shield blocks costs one layer (and so one gun level)
+ * Rules (design v0.2 §3–4):
+ * - the field never closes and has no heat: every energy round it touches
+ *   is absorbed
+ * - banking is limited to ENERGY.capPerSec; past that (or with a full
+ *   gauge) rounds are still absorbed, they just add nothing
+ * - the EMP needs a full gauge and spends all of it, with a minimum gap of
+ *   EMP.cooldown between pulses
+ *
+ * Pure game-side state: GameApp mirrors it into the store for the HUD.
  */
 export class CoreSystem {
-  /** false = control build for A/B playtests: the core is switched off. */
-  enabled = true
   energy = 0
-  heat = 0
-  overheated = false
-
-  private window = 0         // seconds left in the open absorb window
-  private cooldown = 0       // absorb cooldown
-  private coolDelay = 0
-  private catchesThisWindow = 0
-
-  /** Bumped on every catch so the HUD can replay its "energy jump" pulse. */
+  /** Seconds until the EMP may fire again. */
+  empCd = 0
+  /** Bumped on every absorbed round so the HUD can pulse the gauge. */
   catchSerial = 0
-  /** Per-run counts for the playtest report. */
-  tally = { windows: 0, whiffs: 0, catches: 0, overheats: 0, shieldBlocks: 0, peakLevel: 0 }
+  /** Per-stage counts for the playtest report. */
+  tally = { rounds: 0, banked: 0, wasted: 0, emps: 0 }
 
-  get absorbing() { return this.window > 0 }
-  get absorbReady() {
-    return this.enabled && !this.overheated && this.window <= 0 && this.cooldown <= 0
-  }
-  /** 0 = just used, 1 = ready. For the HUD. */
-  get absorbCharge() {
-    if (this.window > 0) return 0
-    return 1 - Math.max(0, this.cooldown) / ABSORB.cooldown
-  }
-  /** Gun level 0–4, straight from stored energy. */
-  get level() {
-    return this.enabled ? Math.min(MAX_LEVEL, Math.floor(this.energy / ENERGY.perLevel)) : 0
-  }
-  /** Shield layers up (each blocks one hit). */
-  get shieldLayers() {
-    return this.enabled ? Math.floor(this.energy / SHIELD.cost) : 0
-  }
+  // Token bucket for the banking limit: refills at capPerSec, holds one
+  // second's worth.
+  private budget = ENERGY.capPerSec
+  // Recent catches, for the rising pitch of a quick run of them.
+  private streak = 0
+  private streakT = 0
+
+  get full() { return this.energy >= ENERGY.max }
+  get empReady() { return this.full && this.empCd <= 0 }
+  /** 0 = just fired, 1 = gap over. */
+  get empCharge() { return 1 - Math.max(0, this.empCd) / EMP.cooldown }
 
   reset() {
-    this.energy = 0; this.heat = 0; this.overheated = false
-    this.window = 0; this.cooldown = 0; this.coolDelay = 0
-    this.catchesThisWindow = 0
-  }
-
-  /** Playtest counts span a whole run, so they reset separately from the
-   *  per-stage state above. */
-  resetTally() {
-    this.tally = { windows: 0, whiffs: 0, catches: 0, overheats: 0, shieldBlocks: 0, peakLevel: 0 }
-  }
-
-  /** Try to open the window. Returns false if absorb is unavailable. */
-  startAbsorb(): boolean {
-    if (!this.absorbReady) return false
-    this.window = ABSORB.window
-    this.catchesThisWindow = 0
-    this.tally.windows++
-    this.addHeat(HEAT.perActivation)
-    if (this.overheated) return false   // the activation itself tipped it over
-    audioSystem.playAbsorbOpen()
-    return true
-  }
-
-  /** A dash (or an overheat) cuts the window short; cooldown still applies. */
-  cancelAbsorb() {
-    if (this.window > 0) this.closeWindow()
-  }
-
-  /** One absorbable round caught in the window. */
-  catchRound() {
-    const before = this.level
-    this.energy = Math.min(ENERGY.max, this.energy + ENERGY.perCatch)
-    this.catchesThisWindow++
-    this.catchSerial++
-    this.tally.catches++
-    audioSystem.playAbsorbCatch(this.catchesThisWindow)
-    if (this.level > before) {
-      audioSystem.playLevelUp()
-      this.tally.peakLevel = Math.max(this.tally.peakLevel, this.level)
-    }
-    this.addHeat(HEAT.perCatch)
-  }
-
-  /** A hit landed while a shield layer was up: spend the layer instead of
-   *  the ship. Returns false if there was no shield to spend. */
-  breakShield(): boolean {
-    if (this.shieldLayers <= 0) return false
-    this.energy = Math.max(0, this.energy - SHIELD.cost)
-    this.tally.shieldBlocks++
-    audioSystem.playShieldBreak()
-    return true
-  }
-
-  /** The ship was destroyed: whatever energy was left (less than one layer)
-   *  goes with it. */
-  onDeath() {
     this.energy = 0
-    this.cancelAbsorb()
+    this.empCd = 0
+    this.budget = ENERGY.capPerSec
+    this.streak = 0
+    this.streakT = 0
+    this.tally = { rounds: 0, banked: 0, wasted: 0, emps: 0 }
+  }
+
+  /** An energy round touched the field. */
+  absorb() {
+    const wasReady = this.empReady
+    const gain = Math.min(ENERGY.perRound, this.budget, ENERGY.max - this.energy)
+    this.energy += gain
+    this.budget -= gain
+    this.catchSerial++
+    this.tally.rounds++
+    this.tally.banked += gain
+    if (gain < ENERGY.perRound) this.tally.wasted += ENERGY.perRound - gain
+    this.streak = this.streakT > 0 ? this.streak + 1 : 1
+    this.streakT = 0.6
+    audioSystem.playAbsorbCatch(this.streak)
+    if (!wasReady && this.empReady) audioSystem.playEmpReady()
+  }
+
+  /** Spend the gauge on an EMP. Returns false if it isn't ready. */
+  fireEmp(): boolean {
+    if (!this.empReady) return false
+    this.energy = 0
+    this.empCd = EMP.cooldown
+    this.tally.emps++
+    return true
   }
 
   update(dt: number) {
-    if (this.window > 0) {
-      this.window -= dt
-      if (this.window <= 0) this.closeWindow()
-    } else if (this.cooldown > 0) {
-      this.cooldown -= dt
-    }
-
-    // Heat only bleeds off once absorbing stops (and a beat after the last gain).
-    if (this.coolDelay > 0) this.coolDelay -= dt
-    else if (this.heat > 0 && this.window <= 0) this.heat = Math.max(0, this.heat - HEAT.coolPerSec * dt)
-    if (this.overheated && this.heat <= HEAT.recoverAt) this.overheated = false
-  }
-
-  private closeWindow() {
-    if (this.catchesThisWindow === 0) this.tally.whiffs++
-    this.window = 0
-    this.cooldown = ABSORB.cooldown
-  }
-
-  private addHeat(n: number) {
-    this.heat = Math.min(HEAT.max, this.heat + n)
-    this.coolDelay = HEAT.coolDelay
-    if (this.heat >= HEAT.max && !this.overheated) {
-      this.overheated = true
-      this.tally.overheats++
-      this.cancelAbsorb()
-      audioSystem.playOverheat()
-    }
+    const wasReady = this.empReady
+    this.budget = Math.min(ENERGY.capPerSec, this.budget + ENERGY.capPerSec * dt)
+    if (this.empCd > 0) this.empCd -= dt
+    if (this.streakT > 0) this.streakT -= dt
+    if (!wasReady && this.empReady) audioSystem.playEmpReady()   // gap ran out on a full gauge
   }
 }

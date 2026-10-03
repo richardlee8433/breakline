@@ -1,206 +1,88 @@
+// Chase stages (docs/Breakline_Chase_Prototype_Design_v0.2.txt §6–8).
+// A stage is won by surviving its duration; nothing has to be destroyed.
+// Prototype lengths are 2 / 3 / 4 minutes (the design's 3 / 5 / 8, cut down
+// until the pacing is proven).
+
+import { TIME_SCALE } from '../config'
+
 export type BgTheme = 'space' | 'nebula' | 'asteroid'
-export type EnemyPath =
-  | 'straight' | 'zigzag' | 'dive' | 'diagonal-left' | 'diagonal-right'
-  | 'swoop-left' | 'swoop-right' | 'sine' | 'hover'
-export type Formation =
-  | 'line-top' | 'line-left' | 'line-right' | 'v-shape'
-  | 'arc-left' | 'arc-right' | 'split' | 'pincer'
 
-export interface WaveVariant {
-  count?: number
-  formation?: Formation
-  path?: EnemyPath
-  interval?: number
-}
+/** Where a wave's pursuers come in along the bottom edge. */
+export type Lane = 'center' | 'left' | 'right' | 'spread'
 
-export interface WaveEntry {
+export interface ChaseWave {
+  /** Seconds into the stage. */
   time: number
+  /** Key into ENEMIES. */
   type: string
   count: number
-  formation: Formation
-  path: EnemyPath
-  /** Seconds between successive members entering. */
-  interval?: number
-  /**
-   * Curated alternatives for this encounter. One is chosen when the wave is
-   * scheduled, keeping the stage learnable while stopping repeat runs from
-   * being frame-for-frame identical.
-   */
-  variants?: WaveVariant[]
-}
-
-export interface BossConfig {
-  shipSprite: string
-  displayW: number
-  flipY: boolean
-  maxHp: number
-  speedMult: number
-  bulletSpeedMult: number
-  fireRateMult: number
-  scoreValue: number
+  lane: Lane
 }
 
 export interface StageConfig {
   id: number
   bgTheme: BgTheme
-  waves: WaveEntry[]
-  /** Multiplies every wave's count (neon-raiden's stages ran at 1.5). */
-  densityMult: number
-  /** With a boss: the time it is called in. Without one, the stage ends
-   *  once this time has passed and the field is clear. */
-  endTime: number
-  boss?: BossConfig
+  /** Seconds to survive. */
+  duration: number
+  /** HUD objective line. */
+  mission: string
+  waves: ChaseWave[]
 }
 
-// Stage 1 — Deep Space: readable formations, with gentle curved entries.
+const w = (time: number, type: string, count: number, lane: Lane): ChaseWave =>
+  ({ time, type, count, lane })
+
+// Stage 1 — patrol pursuit, 120 s. Reach the asteroid belt entrance.
+//   0–20   energy drones only: the field and the EMP gauge
+//   20–50  single missile patrols with a lock warning: what can't be absorbed
+//   50–90  mixed pursuers changing lanes: when to spend the EMP
+//   90–120 heavier pursuit, still with gaps, up to the entrance
 const stage1: StageConfig = {
   id: 1,
   bgTheme: 'space',
-  densityMult: 1.5,
-  endTime: 42,
+  duration: 120,
+  mission: '抵達小行星帶入口',
   waves: [
-    { time: 1,  type: 'fighter', count: 5, formation: 'line-top', path: 'straight',
-      variants: [{ formation: 'split' }, { formation: 'v-shape', path: 'sine' }] },
-    { time: 4,  type: 'scout', count: 6, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
-    { time: 8,  type: 'fighter', count: 4, formation: 'line-left', path: 'dive' },
-    { time: 10, type: 'fighter', count: 4, formation: 'line-right', path: 'dive' },
-    { time: 14, type: 'bomber', count: 3, formation: 'split', path: 'straight', interval: 0.22 },
-    { time: 17, type: 'scout', count: 6, formation: 'v-shape', path: 'sine',
-      variants: [{ formation: 'arc-left', path: 'swoop-right' }, { formation: 'arc-right', path: 'swoop-left' }] },
-    { time: 21, type: 'scout', count: 7, formation: 'split', path: 'zigzag' },
-    { time: 25, type: 'fighter', count: 7, formation: 'pincer', path: 'dive', interval: 0.13,
-      variants: [{ path: 'diagonal-left' }, { path: 'diagonal-right' }] },
-    { time: 30, type: 'bomber', count: 3, formation: 'line-top', path: 'straight' },
-    { time: 33, type: 'scout', count: 6, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }, { formation: 'v-shape', path: 'dive' }] },
-    { time: 37, type: 'fighter', count: 7, formation: 'split', path: 'sine' },
-  ],
-  boss: {
-    shipSprite: './assets/ships/boss1-dreadnought.png',
-    displayW: 300, flipY: false,
-    maxHp: 500, speedMult: 1, bulletSpeedMult: 1, fireRateMult: 1, scoreValue: 5000,
-  },
-}
-
-// Stage 2 — Nebula Field: ambushes, crossfire and delayed pressure.
-const stage2: StageConfig = {
-  id: 2,
-  bgTheme: 'nebula',
-  densityMult: 1.5,
-  endTime: 46,
-  waves: [
-    { time: 1, type: 'interceptor', count: 6, formation: 'split', path: 'sine',
-      variants: [{ formation: 'v-shape', path: 'dive' }] },
-    { time: 4, type: 'fighter', count: 7, formation: 'pincer', path: 'dive', interval: 0.11 },
-    { time: 8, type: 'fighter', count: 5, formation: 'line-right', path: 'swoop-left',
-      variants: [{ formation: 'line-left', path: 'swoop-right' }] },
-    { time: 11, type: 'gunship', count: 2, formation: 'split', path: 'straight', interval: 0.35 },
-    { time: 14, type: 'scout', count: 7, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
-    { time: 18, type: 'interceptor', count: 7, formation: 'pincer', path: 'dive' },
-    { time: 21, type: 'bomber', count: 3, formation: 'line-top', path: 'straight' },
-    { time: 24, type: 'gunship', count: 3, formation: 'split', path: 'straight' },
-    { time: 27, type: 'interceptor', count: 6, formation: 'line-left', path: 'swoop-right',
-      variants: [{ formation: 'line-right', path: 'swoop-left' }, { formation: 'pincer', path: 'dive' }] },
-    { time: 31, type: 'scout', count: 8, formation: 'split', path: 'zigzag' },
-    { time: 34, type: 'bomber', count: 4, formation: 'v-shape', path: 'straight' },
-    { time: 38, type: 'interceptor', count: 8, formation: 'pincer', path: 'dive', interval: 0.10 },
-    { time: 42, type: 'gunship', count: 3, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
-  ],
-  boss: {
-    shipSprite: './assets/ships/boss2-cruiser.png',
-    displayW: 235, flipY: true,
-    maxHp: 600, speedMult: 1.3, bulletSpeedMult: 1.25, fireRateMult: 0.8, scoreValue: 8000,
-  },
-}
-
-// Stage 3 — Asteroid Belt: overlapping formations and less predictable attack geometry.
-const stage3: StageConfig = {
-  id: 3,
-  bgTheme: 'asteroid',
-  densityMult: 1.5,
-  endTime: 44,
-  waves: [
-    { time: 1, type: 'elite', count: 7, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }, { formation: 'split', path: 'sine' }] },
-    { time: 4, type: 'elite', count: 7, formation: 'pincer', path: 'dive', interval: 0.10 },
-    { time: 7, type: 'carrier', count: 2, formation: 'split', path: 'straight' },
-    { time: 10, type: 'interceptor', count: 7, formation: 'v-shape', path: 'sine',
-      variants: [{ formation: 'pincer', path: 'dive' }] },
-    { time: 13, type: 'scout', count: 7, formation: 'arc-right', path: 'swoop-left' },
-    { time: 16, type: 'carrier', count: 3, formation: 'line-top', path: 'straight' },
-    { time: 18, type: 'elite', count: 6, formation: 'line-left', path: 'swoop-right' },
-    { time: 19, type: 'elite', count: 6, formation: 'line-right', path: 'swoop-left' },
-    { time: 23, type: 'gunship', count: 4, formation: 'split', path: 'straight' },
-    { time: 26, type: 'interceptor', count: 8, formation: 'pincer', path: 'dive', interval: 0.09,
-      variants: [{ formation: 'split', path: 'sine' }] },
-    { time: 29, type: 'bomber', count: 4, formation: 'v-shape', path: 'straight' },
-    { time: 32, type: 'carrier', count: 3, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
-    { time: 35, type: 'elite', count: 8, formation: 'split', path: 'dive' },
-    { time: 38, type: 'interceptor', count: 7, formation: 'pincer', path: 'sine' },
-    { time: 41, type: 'carrier', count: 3, formation: 'v-shape', path: 'straight' },
-  ],
-  boss: {
-    shipSprite: './assets/ships/boss3-fortress.png',
-    displayW: 310, flipY: true,
-    maxHp: 850, speedMult: 1.6, bulletSpeedMult: 1.5, fireRateMult: 0.65, scoreValue: 12000,
-  },
-}
-
-// Phase 1 combat arena: introduce each rule alone, then mix them.
-// Energy drones first (absorb), missiles alone (the contrast), then both.
-const arena: StageConfig = {
-  id: 1,
-  bgTheme: 'space',
-  densityMult: 1,
-  endTime: 70,
-  waves: [
-    // absorb: sparse drones holding station
-    { time: 1,  type: 'drone', count: 2, formation: 'line-top', path: 'hover', interval: 0.4 },
-    { time: 9,  type: 'drone', count: 3, formation: 'v-shape', path: 'hover' },
-    // contrast: missiles on their own
-    { time: 18, type: 'missileer', count: 1, formation: 'line-top', path: 'hover' },
-    { time: 25, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
-    // mixed
-    { time: 33, type: 'drone', count: 3, formation: 'line-top', path: 'hover' },
-    { time: 35, type: 'missileer', count: 1, formation: 'line-top', path: 'hover' },
-    { time: 42, type: 'drone', count: 4, formation: 'arc-left', path: 'swoop-right',
-      variants: [{ formation: 'arc-right', path: 'swoop-left' }] },
-    { time: 44, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
-    { time: 52, type: 'drone', count: 4, formation: 'v-shape', path: 'hover' },
-    { time: 54, type: 'missileer', count: 2, formation: 'split', path: 'hover' },
-    { time: 58, type: 'drone', count: 3, formation: 'split', path: 'sine' },
+    w(2, 'drone', 1, 'center'),
+    w(7, 'drone', 2, 'spread'),
+    w(14, 'drone', 2, 'left'),
+    w(21, 'missileer', 1, 'center'),
+    w(27, 'drone', 2, 'right'),
+    w(33, 'missileer', 1, 'left'),
+    w(38, 'drone', 2, 'spread'),
+    w(44, 'missileer', 1, 'right'),
+    w(51, 'drone', 3, 'spread'),
+    w(55, 'missileer', 2, 'spread'),
+    w(63, 'drone', 2, 'left'),
+    w(67, 'missileer', 1, 'center'),
+    w(72, 'drone', 3, 'spread'),
+    w(78, 'missileer', 2, 'spread'),
+    w(84, 'drone', 2, 'right'),
+    w(91, 'drone', 3, 'spread'),
+    w(94, 'missileer', 2, 'spread'),
+    w(100, 'drone', 2, 'center'),
+    w(103, 'missileer', 2, 'spread'),
+    w(108, 'drone', 3, 'spread'),
+    w(111, 'missileer', 1, 'center'),
   ],
 }
 
-export const ARENA: StageConfig = arena
+/** The story's stages in order. Stages 2 (asteroid shortcut) and 3 (mine
+ *  blockade) are not built yet; the story stops after the last one here. */
+export const STORY_STAGES: StageConfig[] = [stage1]
+/** How many stages the finished story will have. */
+export const STORY_LENGTH = 3
 
-// ── Story mode: three stages, each ending in a boss (game plan §8) ─────────
-// Stage 1 is the arena's teaching order capped by the interceptor boss.
-// Stages 2–3 reuse neon-raiden's stage 2–3 waves, with missile interceptors
-// threaded in so the absorb/dodge choice stays live after the tutorial.
-// Bosses reuse neon-raiden's art until part-based bosses exist (Phase 2):
-// 1 Helion interceptor, 2 ancient guardian, 3 Helion blockade flagship.
-const missiles = (times: number[], count = 1): WaveEntry[] =>
-  times.map((time, i) => ({
-    time, type: 'missileer', count,
-    formation: i % 2 ? 'split' : 'line-top', path: 'hover',
-  }))
-const byTime = (waves: WaveEntry[]) => [...waves].sort((a, b) => a.time - b.time)
+/** 'trial' plays one stage with no dialog, for quick playtests. */
+export type GameMode = 'story' | 'trial'
 
-export const STORY_STAGES: StageConfig[] = [
-  { ...arena, id: 1, endTime: 64, boss: stage1.boss },
-  { ...stage2, densityMult: 1.2, waves: byTime([...stage2.waves, ...missiles([6, 20, 36])]) },
-  { ...stage3, densityMult: 1.2, waves: byTime([...stage3.waves, ...missiles([5, 17, 30, 40], 2)]) },
-]
-
-export type GameMode = 'story' | 'arena'
-
-/** The stage config a mode runs at a given (1-based) stage number. */
-export function stageConfig(mode: GameMode, stage: number): StageConfig {
-  if (mode === 'arena') return ARENA
-  return STORY_STAGES[Math.min(Math.max(stage, 1), STORY_STAGES.length) - 1]
+/** The config for a (1-based) stage, with the dev time scale applied. */
+export function stageConfig(stage: number): StageConfig {
+  const base = STORY_STAGES[Math.min(Math.max(stage, 1), STORY_STAGES.length) - 1]
+  if (TIME_SCALE === 1) return base
+  return {
+    ...base,
+    duration: base.duration * TIME_SCALE,
+    waves: base.waves.map((wv) => ({ ...wv, time: wv.time * TIME_SCALE })),
+  }
 }
