@@ -5,6 +5,14 @@ import { portraitURL, PORTRAITS, PortraitId } from '../art/portraits'
 import { PLAYFIELD_LEFT, PLAYFIELD_W, SPRITE_SCALE, STAGE_W } from '../game/config'
 
 const CPS = 28   // characters typed per second (Lastlight's zh rate)
+
+// Warm the cache so a speaker's bust never pops in mid-scene.
+if (typeof window !== 'undefined') {
+  for (const id of Object.keys(PORTRAITS) as PortraitId[]) {
+    const art = portraitURL(id)
+    if (!art.pixel) new Image().src = art.url
+  }
+}
 // Low on the screen, visual-novel style. Combat is paused and the HUD fades
 // out while a scene plays, so nothing underneath needs to stay visible.
 const BOX_BOTTOM = PLAYFIELD_W < STAGE_W ? 64 * SPRITE_SCALE : 28
@@ -60,6 +68,7 @@ function Scene({ id, onDone: finishScene }: { id: keyof typeof SCENES; onDone: (
   }, [finishScene])
 
   const hasArt = who in PORTRAITS
+  const art = hasArt ? portraitURL(who as PortraitId) : null
   const speaker = SPEAKERS[who]
   return (
     <div
@@ -76,8 +85,8 @@ function Scene({ id, onDone: finishScene }: { id: keyof typeof SCENES; onDone: (
         aria-label="Dialogue"
         style={{ left: PLAYFIELD_LEFT + 12 * SPRITE_SCALE, width: PLAYFIELD_W - 24 * SPRITE_SCALE, bottom: BOX_BOTTOM }}
       >
-        {hasArt && (
-          <img key={who} className="dlg-art" src={portraitURL(who as PortraitId)} alt="" draggable={false} />
+        {art && (
+          <img key={who} className={'dlg-art' + (art.pixel ? ' pixel' : '')} src={art.url} alt="" draggable={false} />
         )}
         <div
           className="dlg-box px" onClick={next} role="button" tabIndex={0} aria-label="Next line"
@@ -119,21 +128,26 @@ const DLG_CSS = `
 }
 .dlg { position: absolute; pointer-events: none; animation: dlg-in 0.25s ease-out; }
 .dlg-art {
-  position: absolute; left: calc(var(--k) * -6px); bottom: calc(var(--k) * 10px);
-  width: calc(var(--k) * 128px); height: calc(var(--k) * 160px); z-index: 1;
-  image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); animation: dlg-art 0.3s ease-out;
+  position: absolute; left: calc(var(--k) * -14px); bottom: 0;
+  width: calc(var(--k) * 196px); height: calc(var(--k) * 236px); z-index: 1;
+  object-fit: contain; object-position: bottom center;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); animation: dlg-art 0.3s ease-out;
+}
+.dlg-art.pixel {
+  left: calc(var(--k) * -6px); bottom: calc(var(--k) * 10px);
+  width: calc(var(--k) * 128px); height: calc(var(--k) * 160px); image-rendering: pixelated;
 }
 .dlg-box {
   position: relative; pointer-events: auto; cursor: pointer;
   min-height: calc(var(--k) * 96px);
-  padding: calc(var(--k) * 20px) calc(var(--k) * 18px) calc(var(--k) * 14px) calc(var(--k) * 134px);
+  padding: calc(var(--k) * 20px) calc(var(--k) * 18px) calc(var(--k) * 14px) calc(var(--k) * 184px);
   background: rgba(20, 23, 35, 0.94);
 }
 .dlg-box:focus-visible { outline: 2px solid var(--who); outline-offset: 2px; }
 .dlg-box p { margin: 0; font-size: calc(var(--k) * 15px); line-height: 1.7; color: var(--text); min-height: 3.4em; }
 .dlg-rest { visibility: hidden; }
 .dlg-name {
-  position: absolute; top: calc(var(--k) * -14px); left: calc(var(--k) * 124px);
+  position: absolute; top: calc(var(--k) * -14px); left: calc(var(--k) * 174px);
   padding: calc(var(--k) * 2px) calc(var(--k) * 12px);
   font-weight: 900; font-size: calc(var(--k) * 14px); letter-spacing: 0.06em;
   background: var(--who); color: #140e08; border: 2px solid var(--edge);

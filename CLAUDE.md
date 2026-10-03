@@ -118,7 +118,11 @@ gameover → RETRY STAGE → playing（同一關，不重播對話）
   - 任何從非 playing 進入 playing 的轉換都會呼叫 `startStage`。
   - 進入 story 時呼叫 `enterStory()`，負責清場並換上下一關的背景。
 - **對話 UI**：`ui/StoryDialog.tsx`，移植自 Lastlight 的 `Dialog.tsx` 和 `.dlg` CSS，尺寸乘上 `--k`（= SPRITE_SCALE）。
-- **立繪**：`src/art/portraits.ts`，移植自 Lastlight 的像素立繪引擎，角色是 Breakline 的。有手繪圖時逐一替換。
+- **立繪**：`portraitURL(id)`（`src/art/portraits.ts`），規則同 Lastlight 的 portraitArt。
+  - 有手繪圖的角色，用 `public/assets/portraits/<id>.webp`，從第一版四人合圖切出的胸像，透明背景、底部淡出。這是暫用素材，`docs/characters.md` 規劃之後改用獨立立繪。
+  - 沒有手繪圖的角色，退回移植自 Lastlight 的像素立繪引擎（`.dlg-art.pixel`）。
+  - 新增手繪角色時，把 id 加進 `HAND_DRAWN`。
+  - 正式角色：凱・默瑟（kai）、蘿莎・維加（rosa）、米拉・森博士（mira）、沃斯指揮官（voss）。
 - **試玩數據**：故事模式三關累計。從標題開始新的一局時才重置。
 
 ## 試玩支援（規劃書第十四節）

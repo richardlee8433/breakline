@@ -72,13 +72,13 @@ npm run dev
 | 2 · 遺跡捷徑 | 原第二關敵群＋飛彈攔截機 | 古文明守衛 |
 | 3 · 打開封鎖線 | 原第三關敵群＋飛彈攔截機 | Helion 封鎖旗艦 |
 
-暫定角色：
-- **凱**：飛行員。
-- **蘿莎**：工程師。
-- **諾娃博士**：研究員。
-- **哈爾特司令**：Helion 封鎖艦隊指揮官。
+角色（完整設定見 [`docs/characters.md`](docs/characters.md)）：
+- **凱・默瑟**：地方貨運飛行員，主角。
+- **蘿莎・維加**：工程師，把核心接上戰機的人。
+- **米拉・森博士**：撤離船上的研究員。
+- **沃斯指揮官**：Helion 地方封鎖艦隊指揮官。
 
-立繪是用 Lastlight 的像素立繪產生器畫的暫代圖（`src/art/portraits.ts`），台詞在 `src/game/data/story.ts`。
+對話框的手繪胸像是從第一版四人合圖切出來的暫用素材（`public/assets/portraits/*.webp`）。之後有獨立立繪時再替換。沒有手繪圖的角色，會退回 Lastlight 的像素立繪產生器（`src/art/portraits.ts`）。台詞在 `src/game/data/story.ts`，地名和台詞仍是草稿。
 
 ## 試玩測試（規劃書第十四節）
 

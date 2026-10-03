@@ -110,11 +110,15 @@ Helion 是能源企業與古文明探索力量。本作對抗其地方封鎖艦�
 
 ## 現有 MVP 的角色對應
 
-| 目前程式 ID | MVP 暫定名字 | 本文件建議名字 |
+| 程式 ID | MVP 暫定名字 | 正式名字（遊戲內顯示） |
 | --- | --- | --- |
 | `kai` | 凱 | 凱・默瑟／Kai Mercer |
 | `rosa` | 蘿莎 | 蘿莎・維加／Rosa Vega |
-| `nova` | 諾娃博士 | 米拉・森博士／Dr. Mira Sen |
-| `halt` | 哈爾特司令 | 沃斯指揮官／Commander Adrian Voss |
+| `mira`（原 `nova`） | 諾娃博士 | 米拉・森博士／Dr. Mira Sen |
+| `voss`（原 `halt`） | 哈爾特司令 | 沃斯指揮官／Commander Adrian Voss |
 
-此表供未來整合參考，不表示已修改 ID、顯示名字或劇本。正式整合時可保留既有內部 ID，避免無必要的全專案改名。
+**已整合（2026-10-03）**：
+- 正式名字已套用到劇本（`src/game/data/story.ts`）的名牌與台詞。
+- 對話框改用從第一版四人合圖切出的胸像（`public/assets/portraits/<id>.webp`），作為獨立立繪完成前的暫用素材。
+- 合圖本身沒有放進 repo。
+- 台詞尚未依本文件的台詞風格重寫。

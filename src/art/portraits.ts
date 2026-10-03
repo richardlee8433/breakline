@@ -1,8 +1,9 @@
-// Character bust portraits: procedural pixel art, 64×80, scaled with
-// nearest-neighbour. The engine and shared parts (Pix, body/head/eyes/…) are
-// ported from Lastlight (lastlight-colony src/art/portraits.js) so both games
-// share one portrait language; the characters themselves are Breakline's.
-// Placeholders until hand-drawn art exists — swap per character when it does.
+// Character bust portraits. As in Lastlight (src/art/portraitArt.ts), a
+// character with hand-drawn art (public/assets/portraits/<id>.webp, busts cut
+// from the v1 four-character lineup) uses it; anyone without falls back to procedural
+// pixel art, 64×80, scaled with nearest-neighbour. The pixel engine and
+// shared parts (Pix, body/head/eyes/…) are ported from Lastlight
+// (lastlight-colony src/art/portraits.js).
 
 const W = 64, H = 80
 
@@ -135,7 +136,7 @@ const HELION_YELLOW = 0xf2c230
 const ANCIENT_GLOW = 0x9a7cff
 
 export const PORTRAITS = {
-  /** Kai: local freight pilot, not an ace. Messy dark hair, worn brown flight
+  /** Kai Mercer: local freight pilot, not an ace. Messy dark hair, worn brown flight
    *  jacket with a hand-sewn patch, red scarf, headset mic. */
   kai(p: Pix) {
     const skin = SKIN.b, hair = ramp(0x2a2224)
@@ -154,7 +155,7 @@ export const PORTRAITS = {
     p.rect(19, 33, 3, 7, 0x3a3a48); p.rect(19, 34, 1, 5, 0x6a6a7c)                     // headset
     p.line(21, 40, 26, 44, 0x3a3a48); p.set(26, 44, 0x6fe0ff)
   },
-  /** Rosa: the engineer who wired the alien core into an old fighter. Short
+  /** Rosa Vega: the engineer who wired the alien core into an old fighter. Short
    *  bob, welding goggles pushed up (lenses lit cyan by the core), teal
    *  coveralls, a stylus behind the ear, a grease smudge. */
   rosa(p: Pix) {
@@ -177,9 +178,9 @@ export const PORTRAITS = {
     eyes(p, 0x5a3a24); brows(p, hair[0], 'up'); nose(p, skin); mouth(p, 'grin', skin)
     p.set(38, 42, 0x4a3a34); p.set(39, 43, 0x4a3a34)                                    // grease smudge
   },
-  /** Dr. Nova: researcher on the evacuation ship. Silver crop, a data
+  /** Dr. Mira Sen: researcher on the evacuation ship. Silver crop, a data
    *  visor, dark coat with violet ancient-tech glyph lines. */
-  nova(p: Pix) {
+  mira(p: Pix) {
     const skin = SKIN.d, hair = ramp(0xc8ccd8)
     body(p, 0x2a2a48, { seam: false })
     const G = ANCIENT_GLOW
@@ -196,10 +197,10 @@ export const PORTRAITS = {
     eyes(p, 0x3a2a1a); brows(p, hair[1], 'up'); nose(p, skin); mouth(p, 'open', skin)
     p.rect(34, 35, 9, 4, 0x2a2a48); p.rect(35, 36, 7, 2, G); p.set(36, 36, 0xf0e8ff)  // visor over the eye
   },
-  /** Commander Halt: Helion's local blockade-fleet chief. Standard-issue
+  /** Commander Voss: Helion's local blockade-fleet chief. Standard-issue
    *  white-grey uniform with industrial-yellow trim, peaked cap, grey
    *  temples, a hard stare. */
-  halt(p: Pix) {
+  voss(p: Pix) {
     const skin = SKIN.e, hair = ramp(0x5a5458)
     body(p, 0xc8ccd4, { broad: 2 })
     const U = ramp(0xc8ccd4)
@@ -227,7 +228,7 @@ export type PortraitId = keyof typeof PORTRAITS
 
 const PORTRAIT_BG: Record<PortraitId, [number, number]> = {
   kai: [0x3a2a2a, 0x1a1418], rosa: [0x1e3a3a, 0x0e1a1c],
-  nova: [0x2e2450, 0x120e24], halt: [0x383c48, 0x14161e],
+  mira: [0x2e2450, 0x120e24], voss: [0x383c48, 0x14161e],
 }
 
 /** Render one portrait to a 64×80 canvas. bg=false leaves the background clear. */
@@ -249,9 +250,13 @@ export function renderPortrait(id: PortraitId, bg = true): HTMLCanvasElement {
   return cv
 }
 
+/** Characters with hand-drawn busts in public/assets/portraits/. */
+const HAND_DRAWN: ReadonlySet<PortraitId> = new Set<PortraitId>(['kai', 'rosa', 'mira', 'voss'])
+
 const cache = new Map<string, string>()
-/** Data URL for a portrait, rendered once and cached. */
-export function portraitURL(id: PortraitId): string {
+/** Portrait image for a character, and whether it is the pixel stand-in. */
+export function portraitURL(id: PortraitId): { url: string; pixel: boolean } {
+  if (HAND_DRAWN.has(id)) return { url: `./assets/portraits/${id}.webp`, pixel: false }
   if (!cache.has(id)) cache.set(id, renderPortrait(id, false).toDataURL())
-  return cache.get(id)!
+  return { url: cache.get(id)!, pixel: true }
 }
