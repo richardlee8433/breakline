@@ -42,13 +42,13 @@ export const DASH = {
 export const COUNTER = {
   /** Fixed cost per shot: one decision, one resource. */
   cost: 30,
-  cooldown: 0.3,
-  /** Pulse cannon: a piercing slug that travels up the screen. */
-  speed: 1500,
-  width: 46,
-  length: 120,
-  /** Per enemy, once per pulse. A drone dies to one; a missileer takes two. */
+  /** Same lockout neon-raiden's bomb had, so blasts can't be chained. */
+  cooldown: 0.8,
+  /** Screen-wide blast, like the old bomb: every on-screen enemy takes
+   *  this once. A drone (8 HP) dies; a missileer (16 HP) needs two. */
   damage: 10,
-  /** Per boss, once per pulse. */
-  bossDamage: 45,
+  /** Bosses take a share of max HP rather than a flat number, so the blast
+   *  stays meaningful when boss HP is retuned (the bomb's rule). */
+  bossDamageFrac: 0.08,
+  bossMinDamage: 5,
 }

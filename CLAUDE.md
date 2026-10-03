@@ -44,7 +44,6 @@ src/
       Input / Wave / Drop / BulletPatterns / Scroll / Audio / Music / SampleBank
     fx/
       AbsorbField.ts      # 吸收扇形（畫面與判定共用 contains()）、接彈收束動畫
-      PulseCannon.ts      # 反擊脈衝
       Explosion, Shockwave, Hitstop, ScreenShake, FloatingText, GlowTexture, ...
   store/gameStore.ts      # Zustand：score, lives, phase, core（HUD 鏡像）, hint, report, coreEnabled
   ui/                     # HUD, CorePanel（能源 / 熱量 / 冷卻）, TitleScreen（A/B）, GameOverScreen（試玩報告）
@@ -64,10 +63,10 @@ docs/                     # 設計文件
 ### Tick 順序（GameApp.tick）
 1. 讀輸入，對 absorb / dash / counter 做 edge detect。換關時三者都預設為「按住中」，避免開局那一下 Space 直接觸發衝刺。
 2. 衝刺（會取消吸收）→ 開啟吸收 → `player.update` → `core.update` → 反擊。
-3. 子彈和敵機移動 → 脈衝 → **`collision.absorb()`** → **`collision.check()`**。順序很重要：同一顆子彈只會有一個結果。
+3. 子彈和敵機移動 → **`collision.absorb()`** → **`collision.check()`**。順序很重要：同一顆子彈只會有一個結果。
 
 ### Object pooling（強制）
-- 子彈、敵機、爆炸、gem、pickup、浮動文字、脈衝、衝刺殘影都走 pool，ticker 內不要 `new` 遊戲物件。
+- 子彈、敵機、爆炸、gem、pickup、浮動文字、衝刺殘影都走 pool，ticker 內不要 `new` 遊戲物件。
 - 熱迴圈直接迭代 `pool.all` / `waves.enemies`，跳過 inactive 的，不要每幀 `filter` 出新陣列。
 - 回收用 `pool.release(obj)`；換關時 `releaseAll()`。
 
@@ -86,10 +85,10 @@ docs/                     # 設計文件
 
 - **吸收**：按下觸發，窗口 0.6s、冷卻 1.2s，不能按住。判定範圍是機首前方扇形：頂點在機身中心，半角 50°，半徑 105。和機身同高、在側面或後方的子彈**照樣致命**。吸收中暫停普通射擊；衝刺會取消吸收。
 - **能源 / 熱量**：各 0–100。接到彈會同時加能源和熱量，開窗口也會加熱量。停止吸收後才開始散熱。過熱只鎖住吸收，不扣血，射擊和衝刺照常能用。
-- **反擊**：固定花費 30 能源，目前只有脈衝反擊。脈衝對每台敵機只打一次，並清掉路徑上的能源彈和飛彈。
+- **反擊**：固定花費 30 能源，是全畫面衝擊波（`GameApp.fireCounter`，沿用 neon-raiden 炸彈的做法）。會清空所有能源彈、擊落所有飛彈；畫面內每台敵機受一次傷害，畫面外排隊的不算；Boss 受最大 HP 8% 的傷害。
 - **衝刺**：0.2s、冷卻 2s。可以穿越子彈和飛彈，但**不能**穿越敵機機體和光束（Gunship 雷射）。
 - **Boss 部件**（Phase 2）：每個部件有獨立的 hitbox 和 HP。部件被摧毀時，碰撞和發射**要同時關閉**。
-- **換關清理**：`startStage` 重置能力狀態、敵彈、脈衝、提示、試玩數據，不能殘留。
+- **換關清理**：`startStage` 重置能力狀態、敵彈、提示、試玩數據，不能殘留。
 
 `InputSystem` 對外只輸出統一的 `Actions`，不讓外部直接讀 keyCode。觸控按鈕用 `tapKey()` 走同一條 key path。
 
@@ -111,7 +110,7 @@ headless Chromium 沒有 GPU，FPS 量不準。比較可靠的方法是：
 
 ## 開發階段
 
-- **Phase 1 戰鬥原型**（完成，待試玩）：測試場地、巡邏無人機（能源彈）、飛彈攔截機，加上自動射擊、衝刺、吸收、脈衝反擊。
+- **Phase 1 戰鬥原型**（完成，待試玩）：測試場地、巡邏無人機（能源彈）、飛彈攔截機，加上自動射擊、衝刺、吸收、全畫面反擊。
 - **Phase 2**：完整第一關。內容包括教學、短通訊、有兩個可拆炮塔的 Boss、失敗重試。
 - **Phase 3**：三關故事版，含三台 Boss、開場、結局、關卡解鎖。
 - **Phase 4**：打磨。包括手機操作、輔助難度、街機模式和排行榜。

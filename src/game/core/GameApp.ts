@@ -3,7 +3,7 @@ import { AdvancedBloomFilter } from 'pixi-filters'
 import { loadAssets } from '../../assets/AssetLoader'
 import { InputSystem } from '../systems/InputSystem'
 import { ScrollSystem } from '../systems/ScrollSystem'
-import { CollisionSystem, KillFx } from '../systems/CollisionSystem'
+import { CollisionSystem, KillFx, damageEnemy, damageBoss, shootDownMissile } from '../systems/CollisionSystem'
 import { WaveSystem } from '../systems/WaveSystem'
 import { BulletPool } from '../entities/BulletPool'
 import { Player } from '../entities/Player'
@@ -16,9 +16,8 @@ import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
 import { BulletTrail } from '../fx/BulletTrail'
 import { Shockwave } from '../fx/Shockwave'
-import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture, makePulseTexture } from '../fx/GlowTexture'
+import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture } from '../fx/GlowTexture'
 import { AbsorbField } from '../fx/AbsorbField'
-import { PulseCannon } from '../fx/PulseCannon'
 import { CoreSystem } from '../systems/CoreSystem'
 import { COUNTER } from '../data/core'
 import { GemPool } from '../entities/Gem'
@@ -59,7 +58,6 @@ export class GameApp {
   private killFx!: KillFx
   private core = new CoreSystem()
   private absorbField!: AbsorbField
-  private pulse!: PulseCannon
   private energyPools!: BulletPool[]
   // Held state of the press-to-trigger keys, for edge detection. Starts
   // "held" each stage so the key that started the run can't fire on frame 1.
@@ -67,9 +65,9 @@ export class GameApp {
   private coreSyncAcc = 0
   private lastCoreKey = ''
 
-  // Playtest metrics not already tallied by CoreSystem / PulseCannon.
+  // Playtest metrics not already tallied by CoreSystem.
   private run = {
-    seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0,
+    seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0, counterKills: 0,
     deaths: { energy: 0, missile: 0, hull: 0, beam: 0 } as Record<HitCause, number>,
     deathsWhileAbsorbing: 0,
   }
@@ -180,10 +178,6 @@ export class GameApp {
     this.hostilePools = { energy: this.enemyBullets, missile: this.missiles }
     this.energyPools = [this.enemyBullets, this.bossBullets]
     this.absorbField = new AbsorbField(this.fxLayer, energyTex)
-    this.pulse = new PulseCannon(
-      this.bulletLayer,
-      makePulseTexture(this.app.renderer, COUNTER.width * SPRITE_SCALE, COUNTER.length * SPRITE_SCALE),
-    )
     this.waves = new WaveSystem(this.gameLayer)
     await this.waves.loadTextures()
 
@@ -249,12 +243,10 @@ export class GameApp {
     this.core.reset()
     this.core.enabled = gameStore.getState().coreEnabled
     this.absorbField.clear()
-    this.pulse.releaseAll()
     this.held.absorb = this.held.dash = this.held.counter = true
     this.syncCore(true)
-    this.pulse.kills = 0
     this.run = {
-      seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0,
+      seconds: 0, overheatSeconds: 0, readyIdleSeconds: 0, dashes: 0, counterKills: 0,
       deaths: { energy: 0, missile: 0, hull: 0, beam: 0 }, deathsWhileAbsorbing: 0,
     }
     this.hintSeen = { counter: false, missile: false, overheat: false }
@@ -386,10 +378,6 @@ export class GameApp {
     this.gems.update(dt, this.player.x, this.player.y, H)
 
     this.absorbField.update(dt, this.player.x, this.player.y, this.core.absorbing && !this.player.isDead)
-    this.pulse.update(
-      dt, this.waves.enemies, this.boss.active ? this.boss : null,
-      this.energyPools, this.missiles, this.bossBullets, this.killFx,
-    )
     if (this.core.absorbing) {
       this.collision.absorb(this.energyPools, this.player, (x, y) => {
         this.core.catchRound()
@@ -423,14 +411,38 @@ export class GameApp {
     }
   }
 
+  /**
+   * The counter is a screen-wide blast, the way neon-raiden's bomb was: a
+   * shockwave from the ship, every hostile round erased (missiles knocked
+   * down), every enemy on screen hit once, and a share of a boss's hull.
+   */
   private fireCounter() {
-    const x = this.player.x, y = this.player.y - 26 * SPRITE_SCALE
-    this.pulse.fire(x, y)
-    this.explosions.spawn(x, y, 0.9)
+    const x = this.player.x, y = this.player.y
     this.shockwave.trigger(x, y)
-    screenShake.trigger(4)
-    hitstop.trigger(0.04)
+    screenShake.trigger(8)
+    hitstop.trigger(0.08)
     audioSystem.playCounterFire()
+
+    this.enemyBullets.releaseAll()
+    this.bossBullets.releaseAll()
+    for (const m of this.missiles.all) {
+      if (m.active) shootDownMissile(this.missiles, m, this.killFx)
+    }
+
+    for (const e of this.waves.enemies) {
+      // Only what the player can see: ships still queued above the screen
+      // or outside the corridor are not caught by the blast.
+      if (!e.active || e.sprite.y < 0 || e.sprite.y > H ||
+          e.sprite.x < PLAYFIELD_LEFT || e.sprite.x > PLAYFIELD_RIGHT) continue
+      if (damageEnemy(e, COUNTER.damage, this.killFx)) this.run.counterKills++
+    }
+
+    if (this.boss.active) {
+      const dmg = Math.max(COUNTER.bossMinDamage, this.boss.maxHp * COUNTER.bossDamageFrac)
+      damageBoss(this.boss, dmg, this.boss.sprite.x, this.boss.sprite.y, this.killFx, this.bossBullets)
+      this.explosions.spawn(this.boss.sprite.x, this.boss.sprite.y, 3)
+      audioSystem.playExplosion('large')
+    }
   }
 
   /** Mirror the core into the store for the HUD: at most 20 Hz, and only
@@ -501,7 +513,7 @@ export class GameApp {
       seconds: round1(r.seconds),
       score: s.score,
       ...this.core.tally,
-      counterKills: this.pulse.kills,
+      counterKills: r.counterKills,
       overheatSeconds: round1(r.overheatSeconds),
       readyIdleSeconds: round1(r.readyIdleSeconds),
       dashes: r.dashes,

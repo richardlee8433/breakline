@@ -38,7 +38,7 @@ export interface RunReport {
   whiffs: number         // windows that caught nothing
   catches: number        // rounds absorbed
   counters: number       // counter shots fired
-  counterKills: number   // enemies killed by counter pulses
+  counterKills: number   // enemies killed by counter blasts
   overheats: number
   overheatSeconds: number
   readyIdleSeconds: number  // time spent with a counter affordable but unused

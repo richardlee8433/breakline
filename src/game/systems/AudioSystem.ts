@@ -67,6 +67,7 @@ class AudioSystem {
 
   playCounterFire() {
     this.fire(SFX['counter-fire'])
+    this.fire(SFX['counter-blast'])
   }
 
   playOverheat() {

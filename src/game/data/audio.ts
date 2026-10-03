@@ -13,7 +13,7 @@ export type SfxKey =
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
   | 'pickup-life'
   | 'gem' | 'graze' | 'missile-launch'
-  | 'absorb-open' | 'absorb-catch' | 'counter-ready' | 'counter-fire' | 'overheat' | 'dash'
+  | 'absorb-open' | 'absorb-catch' | 'counter-ready' | 'counter-fire' | 'counter-blast' | 'overheat' | 'dash'
 
 export interface SfxDef {
   /** File name inside SFX_DIR. */
@@ -56,6 +56,8 @@ export const SFX: Record<SfxKey, SfxDef> = {
   'absorb-catch':    { src: 'gem-alt.ogg',      gain: 0.34, throttleMs: 30 },
   'counter-ready':   { src: 'pickup-alt.ogg',   gain: 0.42, throttleMs: 600 },
   'counter-fire':    { src: 'bigshot3.ogg',     gain: 0.80 },
+  // The old bomb's explosion, layered under the release: a full-screen hit.
+  'counter-blast':   { src: 'explosion3.ogg',   gain: 0.70 },
   overheat:          { src: 'alarm1.ogg',       gain: 0.40, throttleMs: 800 },
   dash:              { src: 'smallshot5.ogg',   gain: 0.30, detune: 60 },
 }
