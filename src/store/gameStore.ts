@@ -6,6 +6,22 @@ export function chainMult(chain: number): number {
   return chain >= 20 ? 8 : chain >= 10 ? 4 : chain >= 5 ? 2 : 1
 }
 
+/** HUD-facing mirror of the core, written by GameApp at a throttled rate. */
+export interface CoreView {
+  energy: number        // 0–100
+  heat: number          // 0–100
+  overheated: boolean
+  absorbing: boolean
+  absorbCharge: number  // 0 = just used, 1 = ready
+  dashCharge: number    // 0 = just used, 1 = ready
+  catchSerial: number   // bumps on each catch; drives the energy-bar pulse
+}
+
+const freshCore: CoreView = {
+  energy: 0, heat: 0, overheated: false, absorbing: false,
+  absorbCharge: 1, dashCharge: 1, catchSerial: 0,
+}
+
 interface GameState {
   score: number
   hiScore: number
@@ -21,6 +37,9 @@ interface GameState {
   bossWarning: boolean
   soundEnabled: boolean
   paused: boolean
+  /** false = A/B control build: same arena, core switched off. */
+  coreEnabled: boolean
+  core: CoreView
 
   addScore: (n: number) => void
   addKillScore: (base: number) => { awarded: number; mult: number }
@@ -29,13 +48,14 @@ interface GameState {
   loseLife: () => void
   addLife: () => void
   setPhase: (p: GameState['phase']) => void
+  setCore: (c: CoreView) => void
+  startRun: (coreEnabled: boolean) => void
   setBossHp: (hp: number, max: number) => void
   setBossActive: (v: boolean) => void
   setBossWarning: (v: boolean) => void
   advanceStage: () => void
   toggleSound: () => void
   togglePause: () => void
-  reset: (keepHi?: boolean) => void
 }
 
 const freshPlay = {
@@ -44,6 +64,7 @@ const freshPlay = {
   stage: 1, phase: 'playing' as const,
   bossHp: 0, bossMaxHp: 1, bossActive: false, bossWarning: false,
   paused: false,
+  core: freshCore,
 }
 
 const SOUND_KEY = 'breakline.soundEnabled'
@@ -83,6 +104,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   hiScore: loadHiScore(),
   phase: 'title',
   soundEnabled: loadSoundPref(),
+  coreEnabled: true,
 
   addScore: (n) => set((s) => {
     const score = s.score + n
@@ -121,6 +143,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (phase === 'gameover' || phase === 'complete' || phase === 'title') saveHiScore(s.hiScore)
     return { phase, paused: false }
   }),
+  setCore: (core) => set({ core }),
+  startRun: (coreEnabled) => set((s) => ({
+    ...freshPlay,
+    hiScore: s.hiScore,
+    soundEnabled: s.soundEnabled,
+    coreEnabled,
+  })),
   setBossHp: (hp, max) => set({ bossHp: hp, bossMaxHp: max }),
   setBossActive: (v) => set({ bossActive: v }),
   setBossWarning: (v) => set({ bossWarning: v }),
@@ -143,11 +172,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (s.phase !== 'playing') return {}   // pausing only makes sense mid-game
     return { paused: !s.paused }
   }),
-  reset: (keepHi = true) => set((s) => ({
-    ...freshPlay,
-    hiScore: keepHi ? s.hiScore : 0,
-    soundEnabled: s.soundEnabled,
-  })),
 }))
 
 export const gameStore = useGameStore

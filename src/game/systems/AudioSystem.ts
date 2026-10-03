@@ -44,6 +44,32 @@ class AudioSystem {
     this.fire(SFX.shoot, 1.07)
   }
 
+  // ── core ────────────────────────────────────────────────────────────────
+  playAbsorbOpen() {
+    this.fire(SFX['absorb-open'], 0.8)
+  }
+
+  /** Catches within one window climb a semitone each, so a big haul sings. */
+  playAbsorbCatch(nth: number) {
+    this.fire(SFX['absorb-catch'], Math.pow(2, Math.min(nth - 1, 12) / 12))
+  }
+
+  playCounterReady() {
+    this.fire(SFX['counter-ready'])
+  }
+
+  playCounterFire() {
+    this.fire(SFX['counter-fire'])
+  }
+
+  playOverheat() {
+    this.fire(SFX.overheat)
+  }
+
+  playDash() {
+    this.fire(SFX.dash, 0.6)
+  }
+
   /** Heavier, lower thump than any energy cue: a missile is coming. */
   playMissileLaunch() {
     this.fire(SFX['missile-launch'], 0.75)

@@ -2,21 +2,22 @@ import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 
 export function TitleScreen() {
-  const { hiScore, reset } = useGameStore()
+  const { hiScore, startRun } = useGameStore()
+  const start = () => startRun(true)
   const [blink, setBlink] = useState(true)
 
   useEffect(() => {
     const id = setInterval(() => setBlink((b) => !b), 500)
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'Enter') reset()
+      if (e.code === 'Space' || e.code === 'Enter') start()
     }
     window.addEventListener('keydown', onKey)
     return () => { clearInterval(id); window.removeEventListener('keydown', onKey) }
-  }, [reset])
+  }, [startRun])
 
   return (
     <div
-      onPointerDown={() => reset()}
+      onPointerDown={start}
       style={{
       position: 'absolute', inset: 0,
       display: 'flex', flexDirection: 'column',
@@ -48,6 +49,7 @@ export function TitleScreen() {
       <div style={{ marginTop: 48, fontSize: 10, color: '#555', lineHeight: 1.8 }}>
         MOVE: ARROW KEYS / WASD<br />
         FIRE: AUTO<br />
+        ABSORB: SHIFT &nbsp;&nbsp; DASH: SPACE &nbsp;&nbsp; COUNTER: E<br />
         PAUSE: P / ESC
       </div>
     </div>

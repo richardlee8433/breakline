@@ -16,7 +16,11 @@ import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
 import { BulletTrail } from '../fx/BulletTrail'
 import { Shockwave } from '../fx/Shockwave'
-import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture } from '../fx/GlowTexture'
+import { makeGlowBulletTexture, makeEnergyBulletTexture, makeMissileTexture, makePulseTexture } from '../fx/GlowTexture'
+import { AbsorbField } from '../fx/AbsorbField'
+import { PulseCannon } from '../fx/PulseCannon'
+import { CoreSystem } from '../systems/CoreSystem'
+import { COUNTER } from '../data/core'
 import { GemPool } from '../entities/Gem'
 import { musicSystem } from '../systems/MusicSystem'
 import { EngineExhaust } from '../fx/EngineExhaust'
@@ -53,6 +57,15 @@ export class GameApp {
   private shockwave!: Shockwave
   private floats!: FloatingTextPool
   private killFx!: KillFx
+  private core = new CoreSystem()
+  private absorbField!: AbsorbField
+  private pulse!: PulseCannon
+  private energyPools!: BulletPool[]
+  // Held state of the press-to-trigger keys, for edge detection. Starts
+  // "held" each stage so the key that started the run can't fire on frame 1.
+  private held = { absorb: true, dash: true, counter: true }
+  private coreSyncAcc = 0
+  private lastCoreKey = ''
 
   private bgLayer!: Container
   private gameLayer!: Container
@@ -154,6 +167,12 @@ export class GameApp {
       this.bulletLayer, makeGlowBulletTexture(this.app.renderer, 0x44aaff, 3.5 * SPRITE_SCALE))
 
     this.hostilePools = { energy: this.enemyBullets, missile: this.missiles }
+    this.energyPools = [this.enemyBullets, this.bossBullets]
+    this.absorbField = new AbsorbField(this.fxLayer, energyTex)
+    this.pulse = new PulseCannon(
+      this.bulletLayer,
+      makePulseTexture(this.app.renderer, COUNTER.width * SPRITE_SCALE, COUNTER.length * SPRITE_SCALE),
+    )
     this.waves = new WaveSystem(this.gameLayer)
     await this.waves.loadTextures()
 
@@ -216,6 +235,12 @@ export class GameApp {
     this.gems.releaseAll()
     this.floats.releaseAll()
     this.player.reset()
+    this.core.reset()
+    this.core.enabled = gameStore.getState().coreEnabled
+    this.absorbField.clear()
+    this.pulse.releaseAll()
+    this.held.absorb = this.held.dash = this.held.counter = true
+    this.syncCore(true)
     gameStore.getState().resetChain()
     this.chainTimer = 0
     this.lastChain = 0
@@ -252,8 +277,20 @@ export class GameApp {
     if (hitstop.update(dt)) return   // impact freeze-frame
 
     this.input.update()
-    this.player.update(dt, this.input.actions)
+    const a = this.input.actions
+    const absorbPressed = a.absorb && !this.held.absorb
+    const dashPressed = a.dash && !this.held.dash
+    const counterPressed = a.counter && !this.held.counter
+    this.held.absorb = a.absorb; this.held.dash = a.dash; this.held.counter = a.counter
+
+    // A dash cancels an open absorb window; absorb can't open mid-dash.
+    if (dashPressed && this.player.tryDash(a)) this.core.cancelAbsorb()
+    if (absorbPressed && !this.player.isDead && !this.player.isDashing) this.core.startAbsorb()
+
+    this.player.update(dt, a, this.core.absorbing)
     if (this.player.consumeJustDied()) this.onPlayerDeath()
+    this.core.update(dt)
+    if (counterPressed && !this.player.isDead && this.core.spendCounter()) this.fireCounter()
 
     // Kill-chain lapse: each kill rearms the window; silence breaks the chain
     const chain = gameStore.getState().chain
@@ -327,6 +364,17 @@ export class GameApp {
     this.pickups.update(dt, this.player.x, this.player.y, H)
     this.gems.update(dt, this.player.x, this.player.y, H)
 
+    this.absorbField.update(dt, this.player.x, this.player.y, this.core.absorbing && !this.player.isDead)
+    this.pulse.update(
+      dt, this.waves.enemies, this.boss.active ? this.boss : null,
+      this.energyPools, this.missiles, this.bossBullets, this.killFx,
+    )
+    if (this.core.absorbing) {
+      this.collision.absorb(this.energyPools, this.player, (x, y) => {
+        this.core.catchRound()
+        this.absorbField.spawnCatch(x, y)
+      })
+    }
     this.collision.check(
       this.playerBullets, this.enemyBullets, this.bossBullets, this.missiles,
       this.waves.enemies,
@@ -339,11 +387,56 @@ export class GameApp {
     this.shockwave.update(dt)
     this.floats.update(dt)
 
+    // Hull state at a glance: cyan while catching, a hot flicker when overheated.
+    if (!this.player.isDead) {
+      this.player.sprite.tint = this.core.overheated
+        ? (Math.sin(performance.now() * 0.03) > 0 ? 0xff7a50 : 0xffc0a0)
+        : this.core.absorbing ? 0xb8fbff : 0xffffff
+    }
+    this.syncCore(false, dt)
+
     // Boss-less stages (the Phase 1 arena) end once the field is clear.
     if (this.waves.finished && !this.player.isDead) gameStore.getState().setPhase('complete')
   }
 
+  private fireCounter() {
+    const x = this.player.x, y = this.player.y - 26 * SPRITE_SCALE
+    this.pulse.fire(x, y)
+    this.explosions.spawn(x, y, 0.9)
+    this.shockwave.trigger(x, y)
+    screenShake.trigger(4)
+    hitstop.trigger(0.04)
+    audioSystem.playCounterFire()
+  }
+
+  /** Mirror the core into the store for the HUD: at most 20 Hz, and only
+   *  when something visible changed — except catches and state flips, which
+   *  push at once so the energy bar jumps on the frame it should. */
+  private syncCore(force: boolean, dt = 0) {
+    const c = this.core
+    const view = {
+      energy: Math.round(c.energy),
+      heat: Math.round(c.heat),
+      overheated: c.overheated,
+      absorbing: c.absorbing,
+      absorbCharge: Math.round(c.absorbCharge * 20) / 20,
+      dashCharge: Math.round(this.player.dashCharge * 20) / 20,
+      catchSerial: c.catchSerial,
+    }
+    const key = `${view.energy}|${view.heat}|${view.overheated}|${view.absorbing}|${view.absorbCharge}|${view.dashCharge}|${view.catchSerial}`
+    if (key === this.lastCoreKey) return
+    const prev = gameStore.getState().core
+    const urgent = view.catchSerial !== prev.catchSerial || view.overheated !== prev.overheated ||
+      view.absorbing !== prev.absorbing
+    this.coreSyncAcc += dt
+    if (!force && !urgent && this.coreSyncAcc < 0.05) return
+    this.coreSyncAcc = 0
+    this.lastCoreKey = key
+    gameStore.getState().setCore(view)
+  }
+
   private onPlayerDeath() {
+    this.core.cancelAbsorb()
     this.explosions.spawn(this.player.x, this.player.y, 2.5)
     screenShake.trigger(8)
     hitstop.trigger(0.15)

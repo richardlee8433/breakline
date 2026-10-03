@@ -12,6 +12,7 @@ import { screenShake } from '../fx/ScreenShake'
 import { hitstop } from '../fx/Hitstop'
 import { SPRITE_SCALE } from '../config'
 import { spawnEnemyDrop } from './DropSystem'
+import { AbsorbField } from '../fx/AbsorbField'
 
 const GRAZE_RADIUS = 22 * SPRITE_SCALE
 const BULLET_R = 3 * SPRITE_SCALE
@@ -68,6 +69,23 @@ export function damageBoss(boss: Boss, damage: number, impactX: number, impactY:
 }
 
 export class CollisionSystem {
+  /**
+   * Catch absorbable rounds inside the open window's wedge. Runs BEFORE
+   * check() each frame, so a caught round is released before it could also
+   * register as a hit: one bullet, one outcome. Missiles never come here.
+   */
+  absorb(energyPools: BulletPool[], player: Player, onCatch: (x: number, y: number) => void) {
+    if (player.isDead) return
+    for (const pool of energyPools) {
+      for (const b of pool.all) {
+        if (!b.active || !AbsorbField.contains(player.x, player.y, b.sprite.x, b.sprite.y)) continue
+        const x = b.sprite.x, y = b.sprite.y
+        pool.release(b)
+        onCatch(x, y)
+      }
+    }
+  }
+
   check(
     playerBullets: BulletPool, enemyBullets: BulletPool, bossBullets: BulletPool, missiles: BulletPool,
     enemies: Enemy[], boss: Boss | null, player: Player, fx: KillFx,
@@ -122,6 +140,9 @@ export class CollisionSystem {
     }
 
     // ── hostile bullets → player (hit, else graze) ──────────────────────
+    // A dash passes through every round, energy and missile alike. Hulls
+    // (above) and enemy beams (GameApp) still connect.
+    if (player.isDashing) return
     const g = GRAZE_RADIUS
     for (const pool of [enemyBullets, bossBullets, missiles]) {
       for (const bullet of pool.all) {

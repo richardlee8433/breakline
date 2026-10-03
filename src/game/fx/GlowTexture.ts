@@ -72,3 +72,17 @@ export function makeMissileTexture(renderer: Renderer, scale: number): Texture {
   g.destroy()
   return tex
 }
+
+/** Counter-attack pulse: a tall capsule of white-hot core inside a cyan
+ *  sheath — the caught energy, compressed and thrown back. */
+export function makePulseTexture(renderer: Renderer, width: number, length: number): Texture {
+  const g = new Graphics()
+  const color = 0x33eeff
+  g.roundRect(-width * 0.8, -length * 0.55, width * 1.6, length * 1.1, width * 0.8).fill({ color, alpha: 0.14 })
+  g.roundRect(-width * 0.5, -length * 0.5, width, length, width * 0.5).fill({ color, alpha: 0.45 })
+  g.roundRect(-width * 0.3, -length * 0.46, width * 0.6, length * 0.92, width * 0.3).fill({ color: 0x9ff8ff, alpha: 0.9 })
+  g.roundRect(-width * 0.13, -length * 0.42, width * 0.26, length * 0.84, width * 0.13).fill(0xffffff)
+  const tex = renderer.generateTexture({ target: g, antialias: true })
+  g.destroy()
+  return tex
+}

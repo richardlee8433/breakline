@@ -13,6 +13,7 @@ export type SfxKey =
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
   | 'pickup-life'
   | 'gem' | 'graze' | 'missile-launch'
+  | 'absorb-open' | 'absorb-catch' | 'counter-ready' | 'counter-fire' | 'overheat' | 'dash'
 
 export interface SfxDef {
   /** File name inside SFX_DIR. */
@@ -46,6 +47,17 @@ export const SFX: Record<SfxKey, SfxDef> = {
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },
   'missile-launch':  { src: 'bigshot1.ogg',     gain: 0.40, throttleMs: 120, detune: 40 },
+
+  // ── core ───────────────────────────────────────────────────────────────
+  // Each core event gets its own short, distinct cue (game plan §4/§10):
+  // the window opening, every catch (pitch climbs within one window), the
+  // counter becoming affordable, firing it, and overheating.
+  'absorb-open':     { src: 'graze-alt.ogg',    gain: 0.30 },
+  'absorb-catch':    { src: 'gem-alt.ogg',      gain: 0.34, throttleMs: 30 },
+  'counter-ready':   { src: 'pickup-alt.ogg',   gain: 0.42, throttleMs: 600 },
+  'counter-fire':    { src: 'bigshot3.ogg',     gain: 0.80 },
+  overheat:          { src: 'alarm1.ogg',       gain: 0.40, throttleMs: 800 },
+  dash:              { src: 'smallshot5.ogg',   gain: 0.30, detune: 60 },
 }
 
 export type MusicKey =

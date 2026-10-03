@@ -1,5 +1,18 @@
 import { useGameStore, chainMult } from '../store/gameStore'
 import { STAGE_W, PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT } from '../game/config'
+import { CorePanel } from './CorePanel'
+
+const IS_TOUCH = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+
+/** Touch buttons drive the same key path the keyboard does, so InputSystem
+ *  stays the single place that knows what an action is. */
+function tapKey(code: string) {
+  window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }))
+  setTimeout(() => {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }))
+  }, 120)
+}
 
 // Landscape runs a central combat corridor with decorative side wings, so the
 // HUD moves out into those wings instead of sitting over the playfield.
@@ -89,6 +102,9 @@ export function HUD() {
           }}>
             <span>{'♥'.repeat(Math.max(0, lives))}</span>
             <span style={{ pointerEvents: 'all', marginTop: 4 }}>{soundButton}</span>
+            <div style={{ marginTop: 10, width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
+              <CorePanel width={Math.min(300, WING_W - 28)} />
+            </div>
           </div>
         </>
       ) : (
@@ -108,8 +124,11 @@ export function HUD() {
 
           <div style={{ position: 'absolute', top: 28, left: 10 }}>{grazeLine}</div>
           <div style={{ position: 'absolute', top: 44, left: 10 }}>{chainLine}</div>
+          <div style={{ position: 'absolute', bottom: 12, left: 10 }}><CorePanel width={170} /></div>
         </>
       )}
+
+      {IS_TOUCH && <TouchButtons />}
 
       {/* Boss warning banner — centered on the corridor, not the whole stage */}
       {bossWarning && (
@@ -172,6 +191,31 @@ export function HUD() {
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+function TouchButtons() {
+  const coreEnabled = useGameStore((s) => s.coreEnabled)
+  const button = (code: string, text: string, bottom: number, size: number, color: string) => (
+    <button
+      onPointerDown={(e) => { e.stopPropagation(); tapKey(code) }}
+      style={{
+        position: 'absolute', bottom, right: 14, width: size, height: size, borderRadius: '50%',
+        background: `${color}33`, border: `2px solid ${color}`, color: '#fff',
+        fontFamily: 'monospace', fontSize: 11, letterSpacing: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        userSelect: 'none', touchAction: 'none', zIndex: 10,
+      }}
+    >
+      {text}
+    </button>
+  )
+  return (
+    <>
+      {coreEnabled && button('ShiftLeft', 'ABSORB', 18, 76, '#33eeff')}
+      {button('Space', 'DASH', coreEnabled ? 104 : 18, 58, '#b9a6ff')}
+      {coreEnabled && button('KeyE', 'COUNTER', 172, 58, '#ffffff')}
     </>
   )
 }
