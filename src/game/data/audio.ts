@@ -9,9 +9,9 @@ export const SFX_DIR = './assets/audio/sfx/'
 export const MUSIC_DIR = './assets/audio/music/'
 
 export type SfxKey =
-  | 'shoot' | 'boss-hurt' | 'bomb' | 'player-hit' | 'siren'
+  | 'shoot' | 'boss-hurt' | 'player-hit' | 'siren'
   | 'explosion-small' | 'explosion-large' | 'explosion-boss'
-  | 'pickup-power' | 'pickup-bomb' | 'pickup-life'
+  | 'pickup-power' | 'pickup-life'
   | 'gem' | 'graze'
 
 export interface SfxDef {
@@ -38,13 +38,11 @@ export const SFX: Record<SfxKey, SfxDef> = {
   'explosion-small': { src: 'explosion1.ogg',   gain: 0.40, throttleMs: 40, detune: 130 },
   'explosion-large': { src: 'explosion2.ogg',   gain: 0.55, throttleMs: 60, detune: 90 },
   'explosion-boss':  { src: 'explosion4.ogg',   gain: 0.80 },
-  bomb:              { src: 'explosion3.ogg',   gain: 0.70 },
   'player-hit':      { src: 'explosion2.ogg',   gain: 0.85, detune: 60 },
 
   // ── UI / feedback ──────────────────────────────────────────────────────
   siren:             { src: 'alarm3.ogg',       gain: 0.45 },
   'pickup-power':    { src: 'pickup-power.ogg', gain: 0.50 },
-  'pickup-bomb':     { src: 'pickup-bomb.ogg',  gain: 0.50 },
   'pickup-life':     { src: 'pickup-life.ogg',  gain: 0.60 },
   gem:               { src: 'gem.ogg',          gain: 0.28, throttleMs: 25 },
   graze:             { src: 'graze.ogg',        gain: 0.35, throttleMs: 45, detune: 70 },

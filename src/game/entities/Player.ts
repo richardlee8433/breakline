@@ -12,8 +12,6 @@ const BANK_ANGLE = 0.22
 const RESPAWN_DELAY = 1.1
 const RESPAWN_FLY_SPEED = 300
 const RESPAWN_INVINCIBLE = 3
-const DEATHBOMB_WINDOW = 0.15
-const DEATHBOMB_IFRAMES = 1.5
 const HITBOX_SIZE = 6 * SPRITE_SCALE
 const SHIP_DISPLAY_H = 72
 const BULLET_SPEED = 620
@@ -47,9 +45,8 @@ export class Player {
   private flashTimer = 0
   private focusDot: Graphics
   private dotPulse = 0
-  private state: 'alive' | 'grace' | 'dead' | 'respawning' = 'alive'
+  private state: 'alive' | 'dead' | 'respawning' = 'alive'
   private respawnTimer = 0
-  private graceTimer = 0
   private justDied = false
   private tilt = 0
 
@@ -73,11 +70,12 @@ export class Player {
   get y() { return this.sprite.y }
   get hitboxWorld(): Rectangle { return new Rectangle(this.sprite.x + this.hitbox.x, this.sprite.y + this.hitbox.y, this.hitbox.width, this.hitbox.height) }
   get isDead() { return this.state !== 'alive' }
-  get inGrace() { return this.state === 'grace' }
 
   hit() {
     if (this.state !== 'alive' || this.invincible > 0) return false
-    this.state = 'grace'; this.graceTimer = DEATHBOMB_WINDOW; return true
+    this.state = 'dead'; this.justDied = true; this.respawnTimer = RESPAWN_DELAY
+    this.sprite.visible = false; this.focusDot.visible = false
+    return true
   }
 
   /** Brief invincibility from an outside source. */
@@ -87,24 +85,14 @@ export class Player {
     this.flashTimer = 0
   }
 
-  cancelDeath() {
-    if (this.state !== 'grace') return
-    this.state = 'alive'; this.invincible = DEATHBOMB_IFRAMES; this.flashTimer = 0; this.sprite.tint = 0xffffff
-  }
   consumeJustDied() { if (!this.justDied) return false; this.justDied = false; return true }
   reset() {
-    this.state = 'alive'; this.justDied = false; this.graceTimer = 0; this.invincible = 0; this.tilt = 0
+    this.state = 'alive'; this.justDied = false; this.invincible = 0; this.tilt = 0
     this.sprite.rotation = 0; this.sprite.visible = true; this.sprite.alpha = 1; this.sprite.tint = 0xffffff
     this.sprite.x = PLAYFIELD_CENTER; this.sprite.y = this.stageH * 0.8
   }
 
   update(dt: number, actions: Actions) {
-    if (this.state === 'grace') {
-      this.graceTimer -= dt
-      this.sprite.tint = Math.sin(this.graceTimer * 80) > 0 ? 0xff4444 : 0xffffff
-      if (this.graceTimer <= 0) { this.sprite.tint = 0xffffff; this.state = 'dead'; this.justDied = true; this.respawnTimer = RESPAWN_DELAY; this.sprite.visible = false; this.focusDot.visible = false }
-      return
-    }
     if (this.state === 'dead') {
       this.respawnTimer -= dt
       if (this.respawnTimer <= 0) { this.state = 'respawning'; this.sprite.visible = true; this.sprite.x = PLAYFIELD_CENTER; this.sprite.y = this.stageH + 50; this.sprite.rotation = 0; this.tilt = 0; this.invincible = RESPAWN_INVINCIBLE; this.flashTimer = 0 }

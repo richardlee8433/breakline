@@ -58,21 +58,13 @@ class AudioSystem {
     )
   }
 
-  playBomb() {
-    this.fire(SFX.bomb)
-  }
-
   playPlayerHit() {
     this.fire(SFX['player-hit'], 0.9)
   }
 
   // ── pickups & feedback ──────────────────────────────────────────────────
-  playPickup(type: 'power' | 'bomb' | 'life') {
-    this.fire(
-      type === 'life' ? SFX['pickup-life']
-        : type === 'bomb' ? SFX['pickup-bomb']
-          : SFX['pickup-power'],
-    )
+  playPickup(type: 'power' | 'life') {
+    this.fire(type === 'life' ? SFX['pickup-life'] : SFX['pickup-power'])
   }
 
   /** Collect chime climbing one semitone per consecutive gem, as before. */

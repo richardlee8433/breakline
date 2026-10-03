@@ -15,7 +15,6 @@ interface GameState {
   chain: number
   loop: number   // playthrough number; enemies get faster each loop
   lives: number
-  bombs: number
   power: number
   laserPower: number
   plasmaPower: number
@@ -39,7 +38,6 @@ interface GameState {
   addLaserPower: () => void
   addPlasmaPower: () => void
   dropPower: () => void
-  useBomb: () => boolean
   setPhase: (p: GameState['phase']) => void
   setBossHp: (hp: number, max: number) => void
   setBossActive: (v: boolean) => void
@@ -52,7 +50,7 @@ interface GameState {
 
 const freshPlay = {
   score: 0, graze: 0, chain: 0, loop: 1,
-  lives: 3, bombs: 3, power: 0, laserPower: 0, plasmaPower: 0,
+  lives: 3, power: 0, laserPower: 0, plasmaPower: 0,
   weapon: 'vulcan' as WeaponType,
   stage: 1, phase: 'playing' as const,
   bossHp: 0, bossMaxHp: 1, bossActive: false, bossWarning: false,
@@ -147,11 +145,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   : s.weapon === 'plasma' ? { plasmaPower: Math.max(0, s.plasmaPower - 2) }
                           : { power: Math.max(0, s.power - 2) }
   )),
-  useBomb: () => {
-    if (get().bombs <= 0) return false
-    set((s) => ({ bombs: Math.max(0, s.bombs - 1) }))
-    return true
-  },
   setPhase: (phase) => set((s) => {
     // Persist the record at the end of a run
     if (phase === 'gameover' || phase === 'title') saveHiScore(s.hiScore)

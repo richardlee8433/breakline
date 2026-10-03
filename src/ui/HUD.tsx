@@ -1,25 +1,13 @@
 import { useGameStore, chainMult } from '../store/gameStore'
 import { STAGE_W, PLAYFIELD_W, PLAYFIELD_LEFT, PLAYFIELD_RIGHT } from '../game/config'
 
-const IS_TOUCH = typeof window !== 'undefined' &&
-  ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-
 // Landscape runs a central combat corridor with decorative side wings, so the
 // HUD moves out into those wings instead of sitting over the playfield.
 const IS_WIDE = PLAYFIELD_W < STAGE_W
 const WING_W = PLAYFIELD_LEFT
 
-/** Touch buttons drive the same key path the keyboard does, so InputSystem
- *  stays the single place that knows what an action is. */
-function tapKey(code: string) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }))
-  setTimeout(() => {
-    window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }))
-  }, 120)
-}
-
 export function HUD() {
-  const { score, hiScore, graze, chain, loop, lives, bombs, weapon,
+  const { score, hiScore, graze, chain, loop, lives, weapon,
           bossActive, bossHp, bossMaxHp, bossWarning,
           soundEnabled, toggleSound } = useGameStore()
   const mult = chainMult(chain)
@@ -108,7 +96,6 @@ export function HUD() {
             alignItems: 'flex-end', ...mono,
           }}>
             <span>{'♥'.repeat(Math.max(0, lives))}</span>
-            <span>{'💣'.repeat(Math.max(0, bombs))}</span>
             {weaponLine}
             <span style={{ pointerEvents: 'all', marginTop: 4 }}>{soundButton}</span>
           </div>
@@ -124,34 +111,13 @@ export function HUD() {
           }}>
             <span>SCORE {String(score).padStart(6, '0')}</span>
             <span>HI {String(hiScore).padStart(6, '0')}</span>
-            <span>{'♥'.repeat(Math.max(0, lives))}{'  '}{'💣'.repeat(Math.max(0, bombs))}</span>
+            <span>{'♥'.repeat(Math.max(0, lives))}</span>
             {weaponLine}
             {soundButton}
           </div>
 
           <div style={{ position: 'absolute', top: 28, left: 10 }}>{grazeLine}</div>
           <div style={{ position: 'absolute', top: 44, left: 10 }}>{chainLine}</div>
-        </>
-      )}
-
-      {/* Touch action buttons */}
-      {IS_TOUCH && (
-        <>
-          <button
-            onPointerDown={(e) => { e.stopPropagation(); tapKey('KeyX') }}
-            style={{
-              position: 'absolute', bottom: 18, right: 14,
-              width: 64, height: 64, borderRadius: '50%',
-              background: 'rgba(255,60,30,0.30)',
-              border: '2px solid rgba(255,120,80,0.7)',
-              color: '#fff', fontSize: 26,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              userSelect: 'none', touchAction: 'none',
-              zIndex: 10,
-            }}
-          >
-            💣
-          </button>
         </>
       )}
 

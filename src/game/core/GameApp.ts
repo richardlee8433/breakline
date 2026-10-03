@@ -58,7 +58,6 @@ export class GameApp {
   private bulletLayer!: Container
   private fxLayer!: Container
 
-  private bombCooldown = false
   private transitioning = false
   private bossCountdown = -1   // >=0: WARNING banner is up, boss enters at 0
   private chainTimer = 0       // kill-chain lapse countdown
@@ -144,7 +143,7 @@ export class GameApp {
     this.boss      = new Boss(this.gameLayer)
     this.pickups   = new PickupPool(
       this.gameLayer,
-      assets.pickupPower, assets.pickupBomb, assets.pickupOneUp,
+      assets.pickupPower, assets.pickupOneUp,
       assets.pickupLaser, assets.pickupPlasma,
     )
     this.gems      = new GemPool(this.gameLayer, assets.gem)
@@ -345,18 +344,6 @@ export class GameApp {
     this.bombEffect.update(dt)
     this.shockwave.update(dt)
     this.floats.update(dt)
-
-    if (this.input.actions.bomb && !this.bombCooldown) {
-      if (this.player.inGrace) {
-        // Deathbomb: spend a bomb to cancel a pending death
-        if (gameStore.getState().bombs > 0) {
-          this.player.cancelDeath()
-          this.triggerBomb()
-        }
-      } else if (!this.player.isDead) {
-        this.triggerBomb()
-      }
-    }
   }
 
   private onPlayerDeath() {
@@ -372,50 +359,6 @@ export class GameApp {
     this.pickups.spawn(this.player.x + 30, this.player.y - 60, droppedWeapon)
     s.loseLife()
     if (s.lives <= 1) s.setPhase('gameover')
-  }
-
-  private triggerBomb() {
-    if (!gameStore.getState().useBomb()) return
-    this.bombCooldown = true
-    setTimeout(() => { this.bombCooldown = false }, 800)
-
-    // Expanding shockwave from the ship instead of a flat white flash
-    this.shockwave.trigger(this.player.x, this.player.y)
-    screenShake.trigger(8)
-    hitstop.trigger(0.08)
-    audioSystem.playBomb()
-    this.enemyBullets.releaseAll()
-    this.bossBullets.releaseAll()
-
-    for (const e of this.waves.activeEnemies) {
-      e.hp -= 3
-      if (e.hp <= 0) {
-        this.explosions.spawn(e.sprite.x, e.sprite.y, 2)
-        const { awarded, mult } = gameStore.getState().addKillScore(e.scoreValue)
-        this.floats.spawn(e.sprite.x, e.sprite.y - 10, `+${awarded}`, multColor(mult))
-        this.gems.spawn(e.sprite.x, e.sprite.y, 1)
-        spawnEnemyDrop(this.pickups, e.sprite.x, e.sprite.y)
-        e.deactivate()
-      } else {
-        e.flash()
-      }
-    }
-    if (this.boss.active) {
-      // Proportional, not flat: a bomb has always been worth ~8% of a boss's
-      // hull, and hardcoding 5 would have silently made bombs useless against
-      // bosses the moment their HP was retuned.
-      const died = this.boss.hit(
-        Math.max(5, this.boss.maxHp * 0.08),
-        this.boss.sprite.x,
-        this.boss.sprite.y,
-      )
-      this.explosions.spawn(this.boss.sprite.x, this.boss.sprite.y, 3)
-      audioSystem.playExplosion('large')
-      if (died) {
-        this.gems.spawn(this.boss.sprite.x, this.boss.sprite.y, 16)
-        this.gems.magnetizeAll()
-      }
-    }
   }
 
   /** CSS scale of the canvas so touch deltas map to game pixels */

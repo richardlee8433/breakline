@@ -1,13 +1,10 @@
 import { gameStore, WeaponType } from '../../store/gameStore'
 import { PickupPool, PickupType } from '../entities/Pickup'
 
-// Every kill path uses this table. Utility drops stay at 2%/6%; weapon drops
-// are reduced from 22% to 11% so upgrades remain meaningful but less frequent.
+// Every kill path uses this table: 2% 1UP, 11% weapon.
 const ONEUP_CHANCE = 0.02
-const BOMB_CHANCE = 0.06
 const WEAPON_CHANCE = 0.11
-const BOMB_THRESHOLD = ONEUP_CHANCE + BOMB_CHANCE
-const WEAPON_THRESHOLD = BOMB_THRESHOLD + WEAPON_CHANCE
+const WEAPON_THRESHOLD = ONEUP_CHANCE + WEAPON_CHANCE
 
 const STAGE_WEAPON: Record<number, WeaponType> = {
   1: 'vulcan',
@@ -40,8 +37,6 @@ export function spawnEnemyDrop(pickups: PickupPool, x: number, y: number) {
   const roll = Math.random()
   if (roll < ONEUP_CHANCE) {
     pickups.spawn(x, y, 'oneup')
-  } else if (roll < BOMB_THRESHOLD) {
-    pickups.spawn(x, y, 'bomb')
   } else if (roll < WEAPON_THRESHOLD) {
     pickups.spawn(x, y, pickupForWeapon(chooseWeapon()))
   }

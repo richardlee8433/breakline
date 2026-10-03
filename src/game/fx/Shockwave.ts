@@ -4,7 +4,7 @@ const DURATION = 0.55
 const MAX_RADIUS = 1900   // covers even a wide landscape stage from any origin
 
 /**
- * Expanding ring blast for the bomb: a thick white leading edge with a
+ * Expanding ring blast: a thick white leading edge with a
  * cyan trailing ring. Lives in the bloom-filtered fx layer, so it glows.
  */
 export class Shockwave {
